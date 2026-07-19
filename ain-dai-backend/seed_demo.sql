@@ -12,8 +12,7 @@ ON CONFLICT (line_user_id) DO UPDATE
 INSERT INTO providers (user_id, categories, tambon_coverage, bio, verified,
                        rating_avg, rating_count, jobs_done)
 SELECT u.id,
-       ARRAY[(SELECT id FROM service_categories WHERE slug = 'gardening'),
-             (SELECT id FROM service_categories WHERE slug = 'handyman')],
+       (SELECT array_agg(id) FROM service_categories),  -- ช่างเดโมรับทุกหมวด
        ARRAY[1, 2, 3, 4, 5],
        v.bio, v.verified, v.avg::numeric, v.cnt, v.done
 FROM (VALUES
