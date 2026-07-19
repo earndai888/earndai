@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>เอิ้นได้ — บริการท้องถิ่น ใกล้คุณ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;500;600&family=Noto+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --green:#2BA84A; --green-dark:#188A38; --green-pale:#E8F5EC;
+  --navy:#1E3A5F; --orange:#F7941D; --orange-pale:#FEF3E2;
+  --bg:#F5F8F4; --card:#FFFFFF; --line:#E2E9E0; --muted:#68776C;
+  --danger:#D64545; --radius:16px;
+}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{background:#DDE5DA;font-family:'Noto Sans Thai',sans-serif;color:var(--navy);font-size:15px;line-height:1.6}
+.phone{max-width:420px;margin:0 auto;min-height:100vh;background:var(--bg);position:relative;padding-bottom:76px}
+h1,h2,h3,.btn,.chip,.navlbl,.brand{font-family:'Mitr',sans-serif;font-weight:500}
+.screen{display:none;animation:fade .25s ease}
+.screen.on{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.screen{animation:none}.recdot{animation:none}}
+
+.top{display:flex;align-items:center;gap:10px;padding:18px 18px 8px}
+.brand{font-size:22px;color:var(--green-dark);letter-spacing:.2px}
+.brand b{color:var(--navy);font-weight:600}
+.rolesel{margin-left:auto;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:6px 10px;font-size:12.5px;color:var(--navy);font-family:'Noto Sans Thai'}
+.bell{width:38px;height:38px;border-radius:50%;background:var(--card);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:16px}
+
+.bubble{margin:10px 18px 16px;background:var(--green);color:#fff;border-radius:24px 24px 24px 6px;padding:18px 20px;position:relative}
+.bubble h1{font-size:21px;font-weight:600;line-height:1.35}
+.bubble p{font-size:13px;opacity:.92;margin-top:4px}
+.bubble .cta{margin-top:12px;display:inline-block;background:#fff;color:var(--green-dark);border-radius:999px;padding:9px 18px;font-family:'Mitr';font-size:15px;border:none;cursor:pointer}
+
+.sect{padding:4px 18px 6px;display:flex;align-items:baseline}
+.sect h2{font-size:17px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;padding:8px 18px 4px}
+.cat{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px 4px 10px;text-align:center;cursor:pointer}
+.cat:active{background:var(--green-pale)}
+.cat .ic{font-size:24px}
+.cat .lb{font-size:12px;margin-top:6px;color:var(--navy)}
+
+.trust{margin:14px 18px;background:var(--navy);border-radius:var(--radius);padding:14px 16px;color:#fff;display:flex;gap:12px;align-items:center}
+.trust .shield{font-size:26px}
+.trust b{font-family:'Mitr';font-weight:500;font-size:15px;display:block}
+.trust span{font-size:12.5px;opacity:.85}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);margin:10px 18px;padding:14px 16px}
+.prov{display:flex;gap:12px;align-items:center}
+.ava{width:46px;height:46px;border-radius:50%;background:var(--green-pale);display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.prov .nm{font-family:'Mitr';font-size:15px;color:var(--navy)}
+.prov .meta{font-size:12.5px;color:var(--muted)}
+.star{color:var(--orange)}
+.eta{margin-left:auto;font-family:'Mitr';font-size:13px;color:var(--green-dark);white-space:nowrap}
+
+.nav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:420px;background:var(--card);border-top:1px solid var(--line);display:flex;padding:8px 0 12px;z-index:10}
+.nav button{flex:1;background:none;border:none;cursor:pointer;color:var(--muted);font-size:20px}
+.nav button.on{color:var(--green-dark)}
+.navlbl{display:block;font-size:11px;margin-top:2px}
+
+.pagehead{display:flex;align-items:center;gap:12px;padding:18px 18px 6px}
+.back{width:36px;height:36px;border-radius:50%;background:var(--card);border:1px solid var(--line);font-size:16px;cursor:pointer;color:var(--navy)}
+.pagehead h1{font-family:'Mitr';font-size:19px;font-weight:600}
+
+label.f{display:block;font-family:'Mitr';font-size:14px;margin:14px 18px 6px;color:var(--navy)}
+.inp,.ta,select.inp{width:calc(100% - 36px);margin:0 18px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 14px;font-family:'Noto Sans Thai';font-size:14.5px;color:var(--navy)}
+.ta{min-height:88px;resize:vertical}
+.inp:focus,.ta:focus{outline:2px solid var(--green);border-color:var(--green)}
+.row2{display:flex;gap:10px;margin:0 18px}
+.row2 .inp{width:100%;margin:0}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin:0 18px}
+.chip{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:8px 14px;font-size:13.5px;cursor:pointer;color:var(--navy)}
+.chip.on{background:var(--green);border-color:var(--green);color:#fff}
+
+.voice{margin:10px 18px 0;display:flex;align-items:center;gap:10px;background:var(--orange-pale);border:1px dashed var(--orange);border-radius:12px;padding:11px 14px;cursor:pointer}
+.voice .mic{font-size:20px}
+.voice .vt{font-size:13.5px;color:#8A5A10}
+.recdot{width:9px;height:9px;border-radius:50%;background:var(--danger);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.25}}
+.photo{margin:10px 18px 0;border:1px dashed var(--line);border-radius:12px;padding:16px;text-align:center;color:var(--muted);font-size:13.5px;background:var(--card);cursor:pointer}
+.thumbs{display:flex;gap:8px;flex-wrap:wrap;margin:8px 18px 0}
+.thumbs img{width:72px;height:72px;object-fit:cover;border-radius:10px;border:1px solid var(--line)}
+audio{width:100%;margin-top:8px}
+
+.btn{display:block;width:calc(100% - 36px);margin:18px;background:var(--green);color:#fff;border:none;border-radius:999px;padding:14px;font-size:16.5px;cursor:pointer}
+.btn:active{background:var(--green-dark)}
+.btn.ghost{background:var(--card);color:var(--green-dark);border:1.5px solid var(--green)}
+.btn.navy{background:var(--navy)}
+.btn.sm{width:auto;display:inline-block;margin:8px 0 0;padding:9px 18px;font-size:14px}
+.btn:disabled{opacity:.5;cursor:default}
+
+.bid{border:1.5px solid var(--line);cursor:pointer}
+.bid.sel{border-color:var(--green);background:var(--green-pale)}
+.bid .price{font-family:'Mitr';font-size:19px;font-weight:600;color:var(--green-dark);margin-left:auto}
+.bid .msg{font-size:13px;color:var(--muted);margin-top:8px;border-top:1px dashed var(--line);padding-top:8px}
+.tag{display:inline-block;background:var(--green-pale);color:var(--green-dark);border-radius:999px;padding:2px 10px;font-size:11.5px;font-family:'Mitr';margin-left:6px}
+.tag.orange{background:var(--orange-pale);color:#8A5A10}
+
+.qr{width:200px;margin:14px auto;background:#fff;border:1px solid var(--line);border-radius:12px;padding:8px}
+.qr img{width:100%;display:block}
+.paybox{text-align:center;padding-top:6px}
+.paybox .amt{font-family:'Mitr';font-size:32px;font-weight:600;color:var(--navy)}
+.paybox .to{font-size:13px;color:var(--muted)}
+.escrow{margin:12px 18px;background:var(--green-pale);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--green-dark);display:flex;gap:10px;align-items:flex-start}
+.escrow.warn{background:var(--orange-pale);color:#8A5A10}
+
+.otpwrap{text-align:center;padding:26px 18px 8px}
+.otppin{width:120px;height:120px;margin:0 auto;background:var(--orange);border-radius:50% 50% 50% 6px;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center}
+.otppin span{transform:rotate(45deg);font-family:'Mitr';font-weight:600;font-size:30px;color:#fff;letter-spacing:4px}
+.otpwrap h2{margin-top:20px;font-size:19px}
+.otpwrap p{font-size:13.5px;color:var(--muted);margin-top:4px}
+
+.tl{margin:6px 18px;padding-left:8px}
+.tl .st{display:flex;gap:12px;padding:10px 0;align-items:flex-start}
+.tl .dot{width:14px;height:14px;border-radius:50%;background:var(--line);margin-top:5px;flex-shrink:0}
+.tl .st.done .dot{background:var(--green)}
+.tl .st.now .dot{background:var(--orange);outline:4px solid var(--orange-pale)}
+.tl .t1{font-family:'Mitr';font-size:14.5px}
+.tl .t2{font-size:12.5px;color:var(--muted)}
+
+.stars{display:flex;gap:8px;justify-content:center;font-size:34px;padding:8px 0;cursor:pointer}
+.stars span{color:#D8DED6}
+.stars span.on{color:var(--orange)}
+.pts{margin:14px 18px;background:var(--orange-pale);border-radius:var(--radius);padding:14px;text-align:center;color:#8A5A10;font-size:14px}
+.pts b{font-family:'Mitr';font-size:20px;color:var(--orange);display:block}
+.center{text-align:center}
+.note{font-size:12.5px;color:var(--muted);margin:4px 18px;text-align:center}
+.split{margin:12px 18px;background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;font-size:13.5px}
+.split .r{display:flex;padding:3px 0}
+.split .r span:last-child{margin-left:auto;font-family:'Mitr'}
+.apibadge{position:fixed;top:8px;right:8px;background:var(--navy);color:#fff;font-size:11px;border-radius:999px;padding:3px 10px;opacity:.85;z-index:20;font-family:'Mitr'}
+.jobitem{cursor:pointer}
+.jobitem:active{background:var(--green-pale)}
+.statuschip{margin-left:auto;font-size:11.5px;font-family:'Mitr';border-radius:999px;padding:2px 10px;background:var(--green-pale);color:var(--green-dark);white-space:nowrap}
+.bidform{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px;display:none}
+.bidform.on{display:block}
+.bidform input{width:100%;margin:4px 0;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 12px;font-family:'Noto Sans Thai';font-size:14px}
+</style>
+</head>
+<body>
+<div class="phone">
+<div class="apibadge" id="apibadge">API…</div>
+
+<!-- ═══ ลูกค้า: หน้าแรก ═══ -->
+<section class="screen" id="home">
+  <div class="top">
+    <div class="brand">เอิ้น<b>ได้</b></div>
+    <select class="rolesel" id="rolesel1" onchange="setRole(this.value)"></select>
+  </div>
+  <div class="bubble">
+    <h1>มีงานให้ช่วยบ่?<br>เอิ้นหาช่างแถวบ้านได้เลย</h1>
+    <p>คนในพื้นที่ พร้อมช่วยเหลือคุณ • ปลอดภัย เชื่อถือได้</p>
+    <button class="cta" onclick="go('post')">เอิ้นหาช่าง →</button>
+  </div>
+  <div class="sect"><h2>มีอะไรให้เอิ้นได้บ้าง?</h2></div>
+  <div class="grid" id="homegrid"></div>
+  <div class="trust">
+    <div class="shield">🛡️</div>
+    <div><b>เงินของคุณปลอดภัย</b><span>จ่ายผ่านเอิ้นได้ เงินพักไว้ตรงกลาง งานเสร็จค่อยปล่อยให้ช่าง</span></div>
+  </div>
+  <div class="sect"><h2>ช่างแนะนำใกล้คุณ</h2></div>
+  <div id="topprov"></div>
+</section>
+
+<!-- ═══ ลูกค้า: ฟอร์มประกาศงาน ═══ -->
+<section class="screen" id="post">
+  <div class="pagehead"><button class="back" onclick="go('home')">‹</button><h1>เอิ้นหาช่าง</h1></div>
+  <label class="f">ต้องการช่างอะไร</label>
+  <div class="chips" id="catchips"></div>
+  <label class="f">พื้นที่รับบริการ</label>
+  <div class="row2">
+    <select class="inp" id="amphoesel"><option>อ.เมืองศรีสะเกษ</option></select>
+    <select class="inp" id="tambonsel"></select>
+  </div>
+  <label class="f">เล่ารายละเอียดงาน</label>
+  <textarea class="ta" id="desc" placeholder="เช่น หญ้าหน้าบ้านรกมาก พื้นที่ประมาณ 1 งาน มีต้นกล้วยด้วย..."></textarea>
+  <div class="voice" id="voice" onclick="toggleRec()">
+    <div class="mic">🎤</div>
+    <div class="vt" id="vtxt">ไม่ถนัดพิมพ์? กดอัดเสียงเล่างาน แนบให้ช่างฟังได้เลย</div>
+  </div>
+  <div id="voiceplay" style="margin:0 18px"></div>
+  <div class="photo" onclick="document.getElementById('photoinput').click()">📷 ถ่ายรูปหน้างาน (แตะเพื่อเลือกรูป)</div>
+  <input type="file" id="photoinput" accept="image/*" multiple style="display:none" onchange="addPhotos(this.files)">
+  <div class="thumbs" id="photothumbs"></div>
+  <label class="f">งบประมาณ (บาท)</label>
+  <div class="row2">
+    <input class="inp" id="bmin" placeholder="ต่ำสุด เช่น 300" inputmode="numeric">
+    <input class="inp" id="bmax" placeholder="สูงสุด เช่น 500" inputmode="numeric">
+  </div>
+  <label class="f">อยากให้มาวันไหน</label>
+  <div class="row2">
+    <select class="inp" id="daysel"><option>วันนี้</option><option>พรุ่งนี้</option><option selected>เสาร์นี้</option></select>
+    <select class="inp" id="timesel"><option>ช่วงเช้า</option><option>ช่วงบ่าย</option></select>
+  </div>
+  <button class="btn" id="postbtn" onclick="submitJob()">ส่งประกาศหาช่าง</button>
+  <div class="note">ประกาศจะส่งถึงช่างในตำบลของคุณ โดยไม่เปิดเผยชื่อและเบอร์โทร</div>
+</section>
+
+<!-- ═══ ลูกค้า: ส่งแล้ว / รอข้อเสนอ ═══ -->
+<section class="screen" id="sent">
+  <div class="otpwrap">
+    <div style="font-size:64px">📢</div>
+    <h2>เอิ้นถึงช่างแล้ว!</h2>
+    <p id="sentmsg">—</p>
+  </div>
+  <button class="btn ghost" id="viewbids" onclick="openBids()">เช็คข้อเสนอ</button>
+  <div class="note">เคล็ดลับเดโม: สลับบทบาทมุมขวาบนไปเป็น "ช่าง" เพื่อเข้ามาเสนอราคางานนี้ แล้วสลับกลับมาดู</div>
+</section>
+
+<!-- ═══ ลูกค้า: เปรียบเทียบข้อเสนอ ═══ -->
+<section class="screen" id="bids">
+  <div class="pagehead"><button class="back" onclick="go('sent')">‹</button><h1 id="bidhead">ช่างเสนอราคา</h1></div>
+  <div class="note" id="bidnote" style="text-align:left"></div>
+  <div id="bidlist"></div>
+  <button class="btn" id="choosebtn" onclick="chooseBid()" disabled>แตะเลือกช่างก่อน</button>
+</section>
+
+<!-- ═══ ลูกค้า: จ่ายเงิน ═══ -->
+<section class="screen" id="pay">
+  <div class="pagehead"><button class="back" onclick="go('bids')">‹</button><h1>ชำระเงิน</h1></div>
+  <div class="paybox">
+    <div class="to">จ้าง <b id="payname">—</b></div>
+    <div class="amt" id="payamt">—</div>
+    <div class="qr"><img id="qrimg" alt="QR PromptPay"></div>
+    <div class="to">QR PromptPay จริง (มาตรฐาน EMVCo) — สแกนจ่ายด้วยแอปธนาคารใดก็ได้</div>
+  </div>
+  <div class="escrow">🛡️ <span><b>เงินยังไม่ถึงช่างทันที</b> — เงินเข้าบัญชีกลางเอิ้นได้ (escrow) งานเสร็จและคุณกดยืนยันแล้ว เงินถึงจะโอนให้ช่าง</span></div>
+  <button class="btn navy" id="paybtn" onclick="confirmPay()">ฉันโอนแล้ว</button>
+  <div class="note">MVP: ยืนยันการโอนด้วยตนเอง + แอดมินตรวจสลิป — เฟส 2 ต่อ payment gateway ตัดจ่ายอัตโนมัติ</div>
+</section>
+
+<!-- ═══ ลูกค้า: OTP ═══ -->
+<section class="screen" id="otp">
+  <div class="otpwrap">
+    <div class="otppin"><span id="otpcode">— — — —</span></div>
+    <h2>รหัสเริ่มงานของคุณ</h2>
+    <p>เมื่อช่างมาถึงบ้าน <b>บอกรหัสนี้กับช่าง</b><br>ช่างกรอกรหัสในระบบ = ยืนยันว่าเริ่มงานจริง</p>
+  </div>
+  <div class="escrow warn">📍 <span>ห้ามบอกรหัสก่อนช่างมาถึง — รหัสนี้คือหลักฐานว่าช่างมาทำงานที่บ้านคุณจริง</span></div>
+  <button class="btn ghost" onclick="openActiveJob()">ดูสถานะงาน</button>
+</section>
+
+<!-- ═══ ลูกค้า: สถานะงาน ═══ -->
+<section class="screen" id="track">
+  <div class="pagehead"><button class="back" onclick="go('myjobs');loadMyJobs()">‹</button><h1>สถานะงาน</h1>
+    <button class="back" style="margin-left:auto" title="รีเฟรช" onclick="openActiveJob()">⟳</button></div>
+  <div class="card prov"><div class="ava" id="trkava">👷</div><div><div class="nm" id="trkname">—</div><div class="meta" id="trkmeta">—</div></div></div>
+  <div class="tl" id="timeline"></div>
+  <div id="trkextra"></div>
+  <div id="trkactions"></div>
+</section>
+
+<!-- ═══ ลูกค้า: จบงาน + รีวิว ═══ -->
+<section class="screen" id="done">
+  <div class="otpwrap">
+    <div style="font-size:60px">🎉</div>
+    <h2>จบงานเรียบร้อย!</h2>
+    <p id="donemsg">—</p>
+  </div>
+  <div class="pts"><b>+20 แต้มเอิ้น</b>บันทึกลงบัญชีแต้มของคุณแล้ว</div>
+  <div class="split" id="splitbox"></div>
+  <div class="card center" id="reviewcard">
+    <div style="font-family:'Mitr';font-size:15px" id="ratehead">ให้คะแนนช่างหน่อยครับ</div>
+    <div class="stars" id="stars">
+      <span onclick="rate(1)">★</span><span onclick="rate(2)">★</span><span onclick="rate(3)">★</span><span onclick="rate(4)">★</span><span onclick="rate(5)">★</span>
+    </div>
+    <input class="inp" id="reviewtext" style="width:100%;margin:6px 0 0" placeholder="เขียนรีวิวสั้นๆ เช่น งานเรียบร้อย ตรงเวลา">
+    <button class="btn sm" id="reviewbtn" onclick="submitReview()">ส่งรีวิว</button>
+  </div>
+  <div class="escrow" id="fundline">🌱 <span>—</span></div>
+  <button class="btn" onclick="clearActive()">กลับหน้าแรก</button>
+</section>
+
+<!-- ═══ ลูกค้า: งานของฉัน ═══ -->
+<section class="screen" id="myjobs">
+  <div class="pagehead"><button class="back" onclick="go('home')">‹</button><h1>งานของฉัน</h1></div>
+  <div id="myjoblist"><div class="note">กำลังโหลด…</div></div>
+</section>
+
+<!-- ═══ ช่าง: หน้าแรก ═══ -->
+<section class="screen" id="phome">
+  <div class="top">
+    <div class="brand">เอิ้น<b>ได้</b> <span style="font-size:13px;color:var(--muted)">ฝั่งช่าง</span></div>
+    <select class="rolesel" id="rolesel2" onchange="setRole(this.value)"></select>
+  </div>
+  <div class="card" id="pstats" style="background:var(--navy);color:#fff;border:none"></div>
+  <div class="sect"><h2>งานของฉัน</h2></div>
+  <div id="pminelist"><div class="note">—</div></div>
+  <div class="sect"><h2>งานเปิดรับข้อเสนอในพื้นที่</h2></div>
+  <div id="popenlist"><div class="note">—</div></div>
+</section>
+
+<!-- ═══ ช่าง: งานที่ถูกเลือก ═══ -->
+<section class="screen" id="pjob">
+  <div class="pagehead"><button class="back" onclick="loadProviderHome()">‹</button><h1>งานของฉัน</h1>
+    <button class="back" style="margin-left:auto" title="รีเฟรช" onclick="openProviderJob(state.pjobId)">⟳</button></div>
+  <div id="pjobbody"></div>
+</section>
+
+<!-- ═══ แถบล่าง ═══ -->
+<nav class="nav" id="custnav">
+  <button onclick="go('home')">🏠<span class="navlbl">หน้าแรก</span></button>
+  <button onclick="go('post')">📢<span class="navlbl">เอิ้นหาช่าง</span></button>
+  <button onclick="go('myjobs');loadMyJobs()">📋<span class="navlbl">งานของฉัน</span></button>
+</nav>
+
+<script>
+/* ═══ เอิ้นได้ — front จริง เชื่อม API ทุกปุ่ม (dev auth: X-Debug-User) ═══ */
+const ROLES = [
+  {id:'Udemo-customer', label:'👤 ลูกค้า'},
+  {id:'Udemo-bird',     label:'👨‍🌾 พี่เบิร์ด (ช่าง)'},
+  {id:'Udemo-tom',      label:'👨🏽‍🔧 ช่างต้อม (ช่าง)'},
+  {id:'Udemo-kampun',   label:'🧑‍🌾 ลุงคำปุ่น (ช่าง)'},
+];
+const AVATARS = {'พี่เบิร์ด':'👨‍🌾','ช่างต้อม':'👨🏽‍🔧','ลุงคำปุ่น':'🧑‍🌾'};
+let role = localStorage.getItem('aindai_role') || 'Udemo-customer';
+const state = {meta:null, job:null, bids:[], chosen:null, paymentId:null,
+               photos:[], voiceUrl:null, rating:0, pjobId:null};
+
+/* ── helpers ── */
+async function api(path, {method='GET', body}={}){
+  const res = await fetch('/api'+path, {
+    method,
+    headers: {'Content-Type':'application/json', 'X-Debug-User':role},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error(typeof data.detail==='string' ? data.detail : JSON.stringify(data.detail||res.status));
+  return data;
+}
+async function uploadFile(file){
+  const fd = new FormData(); fd.append('file', file);
+  const res = await fetch('/api/uploads', {method:'POST', headers:{'X-Debug-User':role}, body:fd});
+  const data = await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error(data.detail||'อัปโหลดไม่สำเร็จ');
+  return data.url;
+}
+function esc(s){const d=document.createElement('div');d.textContent=s==null?'':String(s);return d.innerHTML;}
+function fmt(x){return (+x).toLocaleString('th-TH',{maximumFractionDigits:0});}
+function avaOf(name){for(const k in AVATARS) if(name && name.includes(k)) return AVATARS[k]; return '👷';}
+function go(id){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('on'));
+  document.getElementById(id).classList.add('on');
+  window.scrollTo(0,0);
+}
+const STATUS_TH = {bidding:'รอข้อเสนอ', assigned:'จ่ายแล้ว รอช่างเริ่มงาน', in_progress:'ช่างกำลังทำงาน',
+                   done:'รอตรวจงาน', confirmed:'จบงานแล้ว', settled:'โอนเงินช่างแล้ว',
+                   cancelled:'ยกเลิก', expired:'หมดอายุ', disputed:'มีข้อพิพาท'};
+
+/* ── บทบาท ── */
+function isProvider(){ return role !== 'Udemo-customer'; }
+function setRole(r){
+  role = r; localStorage.setItem('aindai_role', r);
+  document.querySelectorAll('.rolesel').forEach(s=>s.value=r);
+  route();
+}
+function route(){
+  document.getElementById('custnav').style.display = isProvider() ? 'none' : 'flex';
+  if(isProvider()) loadProviderHome(); else go('home');
+}
+for(const id of ['rolesel1','rolesel2']){
+  document.getElementById(id).innerHTML =
+    ROLES.map(r=>`<option value="${r.id}">${r.label}</option>`).join('');
+  document.getElementById(id).value = role;
+}
+
+/* ── โหลดข้อมูลอ้างอิงจากเซิร์ฟเวอร์ (ไม่ hardcode) ── */
+async function boot(){
+  const b = document.getElementById('apibadge');
+  try{
+    const h = await (await fetch('/healthz')).json();
+    b.textContent = 'API: ต่อแล้ว ✓' + (h.dev_mode?' (dev)':''); b.style.background='var(--green-dark)';
+  }catch{ b.textContent='API: ต่อไม่ได้ ✗'; b.style.background='var(--danger)'; return; }
+  state.meta = await api('/meta');
+  const short = n => ({'ตัดหญ้า-จัดสวน':'ตัดหญ้า','ซ่อมเครื่องใช้ไฟฟ้า':'ซ่อมไฟฟ้า','ช่างซ่อมทั่วไป':'ช่างซ่อม','บริการอื่นๆ':'อื่นๆ'}[n]||n);
+  document.getElementById('homegrid').innerHTML = state.meta.categories.slice(0,8).map(c=>
+    `<div class="cat" onclick="pick('${c.slug}')"><div class="ic">${c.icon||'🔧'}</div><div class="lb">${esc(short(c.name_th))}</div></div>`).join('');
+  document.getElementById('catchips').innerHTML = state.meta.categories.map(c=>
+    `<button class="chip${c.slug==='gardening'?' on':''}" data-slug="${c.slug}" data-name="${esc(c.name_th)}" onclick="chip(this)">${esc(short(c.name_th))}</button>`).join('');
+  document.getElementById('tambonsel').innerHTML = state.meta.tambons.map(t=>
+    `<option value="${t.id}">ต.${esc(t.name)}</option>`).join('');
+  loadTopProviders();
+  route();
+}
+async function loadTopProviders(){
+  const rows = await api('/providers/top');
+  document.getElementById('topprov').innerHTML = rows.map(p=>`
+    <div class="card prov"><div class="ava">${avaOf(p.display_name)}</div>
+      <div><div class="nm">${esc(p.display_name)}${p.verified?'<span class="tag">✓</span>':''}</div>
+      <div class="meta"><span class="star">★</span> ${(+p.rating_avg).toFixed(1)} (${p.jobs_done} งาน)${p.tambon_name?' • ต.'+esc(p.tambon_name):''}</div></div>
+    </div>`).join('') || '<div class="note">ยังไม่มีช่างในระบบ</div>';
+}
+function pick(slug){
+  go('post');
+  document.querySelectorAll('#catchips .chip').forEach(c=>c.classList.toggle('on', c.dataset.slug===slug));
+}
+function chip(el){document.querySelectorAll('#catchips .chip').forEach(c=>c.classList.remove('on'));el.classList.add('on');}
+
+/* ── อัดเสียงจริง (MediaRecorder) ── */
+let mediaRec = null, chunks = [];
+async function toggleRec(){
+  const t = document.getElementById('vtxt');
+  if(mediaRec && mediaRec.state === 'recording'){ mediaRec.stop(); return; }
+  try{
+    const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+    chunks = [];
+    mediaRec = new MediaRecorder(stream);
+    mediaRec.ondataavailable = e => chunks.push(e.data);
+    mediaRec.onstop = async () => {
+      stream.getTracks().forEach(tr=>tr.stop());
+      const blob = new Blob(chunks, {type: mediaRec.mimeType || 'audio/webm'});
+      t.textContent = 'กำลังอัปโหลดเสียง…';
+      try{
+        state.voiceUrl = await uploadFile(new File([blob], 'voice.webm', {type: blob.type}));
+        t.textContent = '✅ แนบเสียงแล้ว — กดฟังด้านล่าง (อัดใหม่ได้)';
+        document.getElementById('voiceplay').innerHTML =
+          `<audio controls src="${state.voiceUrl}"></audio>`;
+        document.getElementById('voice').style.background='var(--green-pale)';
+        document.getElementById('voice').style.borderColor='var(--green)';
+      }catch(e){ t.textContent = 'อัปโหลดเสียงไม่สำเร็จ: '+e.message; }
+    };
+    mediaRec.start();
+    t.innerHTML = '<span class="recdot" style="display:inline-block;margin-right:6px"></span>กำลังอัดเสียง… แตะอีกครั้งเพื่อหยุด';
+  }catch(e){ alert('เปิดไมโครโฟนไม่ได้: '+e.message+'\n(ต้องอนุญาตไมโครโฟนในเบราว์เซอร์)'); }
+}
+
+/* ── อัปโหลดรูปจริง ── */
+async function addPhotos(files){
+  const box = document.getElementById('photothumbs');
+  for(const f of files){
+    try{
+      const url = await uploadFile(f);
+      state.photos.push(url);
+      box.innerHTML += `<img src="${url}" alt="รูปหน้างาน">`;
+    }catch(e){ alert('อัปโหลดรูปไม่สำเร็จ: '+e.message); }
+  }
+}
+
+/* ── 1) สร้างงาน ── */
+async function submitJob(){
+  const cat = document.querySelector('#catchips .chip.on');
+  if(!cat) return alert('เลือกหมวดงานก่อนครับ');
+  const btn = document.getElementById('postbtn');
+  const tSel = document.getElementById('tambonsel');
+  const desc = document.getElementById('desc').value.trim();
+  if(!desc && !state.voiceUrl) return alert('เล่ารายละเอียดงาน (พิมพ์หรืออัดเสียง) ก่อนครับ');
+  btn.disabled = true; btn.textContent = 'กำลังส่งประกาศ…';
+  try{
+    const r = await api('/jobs', {method:'POST', body:{
+      category_slug: cat.dataset.slug, tambon_id: +tSel.value,
+      title: cat.dataset.name + (desc ? ' — ' + desc.slice(0,40) : ' (ฟังเสียงแนบ)'),
+      description: desc || null, photos: state.photos, voice_note_url: state.voiceUrl,
+      budget_min: parseFloat(document.getElementById('bmin').value) || null,
+      budget_max: parseFloat(document.getElementById('bmax').value) || null,
+      preferred_time: document.getElementById('daysel').value + ' ' + document.getElementById('timesel').value,
+    }});
+    localStorage.setItem('aindai_job', r.job_id);
+    state.photos = []; state.voiceUrl = null;
+    document.getElementById('photothumbs').innerHTML = '';
+    document.getElementById('voiceplay').innerHTML = '';
+    document.getElementById('desc').value='';
+    await openActiveJob();
+  }catch(e){ alert('ส่งไม่สำเร็จ: '+e.message); }
+  finally{ btn.disabled=false; btn.textContent='ส่งประกาศหาช่าง'; }
+}
+
+/* ── เปิดงานปัจจุบันตามสถานะจริงจากเซิร์ฟเวอร์ ── */
+function activeJobId(){ return localStorage.getItem('aindai_job'); }
+function clearActive(){ localStorage.removeItem('aindai_job'); go('home'); }
+async function openActiveJob(){
+  const id = activeJobId();
+  if(!id) return alert('ยังไม่มีงานที่กำลังดำเนินการ');
+  try{
+    const j = await api('/jobs/'+id);
+    state.job = j;
+    if(j.status === 'bidding'){
+      document.getElementById('sentmsg').innerHTML =
+        `ส่งประกาศ "${esc(j.title)}"<br>ถึงช่างใน ต.${esc(j.tambon_name)} แล้ว • มีข้อเสนอ ${j.bids_count} รายการ`;
+      document.getElementById('viewbids').textContent =
+        j.bids_count > 0 ? `ดูข้อเสนอ (${j.bids_count} รายการ)` : 'เช็คข้อเสนอ (ยังไม่มี)';
+      go('sent');
+    }else if(j.status === 'assigned' && j.payment && j.payment.status === 'pending'){
+      showPay(j); go('pay');
+    }else if(j.status === 'assigned'){
+      document.getElementById('otpcode').textContent = (j.otp||'').split('').join(' ');
+      go('otp');
+    }else if(j.status === 'confirmed' || j.status === 'settled'){
+      showDone(j); go('done');
+    }else{
+      showTrack(j); go('track');
+    }
+  }catch(e){ alert('โหลดงานไม่ได้: '+e.message); }
+}
+
+/* ── 2) ข้อเสนอ ── */
+async function openBids(){
+  const id = activeJobId();
+  try{
+    state.bids = await api(`/jobs/${id}/bids`);
+    if(state.bids.length === 0) return alert('ยังไม่มีช่างเสนอราคา — สลับบทบาทเป็นช่างเพื่อลองเสนอดูได้');
+    document.getElementById('bidhead').textContent = `ช่างเสนอราคา (${state.bids.length})`;
+    document.getElementById('bidnote').textContent = `งาน: ${state.job?state.job.title:''} — เรียงราคาถูก→แพง`;
+    document.getElementById('bidlist').innerHTML = state.bids.map((b,i)=>`
+      <div class="card bid" id="bid${i}" onclick="sel(${i})">
+        <div class="prov"><div class="ava">${avaOf(b.display_name)}</div>
+          <div><div class="nm">${esc(b.display_name)}${b.verified?'<span class="tag">✓ ยืนยันตัวตน</span>':''}</div>
+          <div class="meta"><span class="star">★</span> ${(+b.rating_avg).toFixed(1)} (${b.jobs_done} งาน) • ถึงได้ ${esc(b.available_at||'-')}</div></div>
+          <div class="price">${fmt(b.price)}฿</div></div>
+        ${b.message?`<div class="msg">"${esc(b.message)}"</div>`:''}
+      </div>`).join('');
+    const cb = document.getElementById('choosebtn');
+    cb.disabled = true; cb.textContent = 'แตะเลือกช่างก่อน'; state.chosen = null;
+    go('bids');
+  }catch(e){ alert('โหลดข้อเสนอไม่ได้: '+e.message); }
+}
+function sel(i){
+  document.querySelectorAll('.bid').forEach(b=>b.classList.remove('sel'));
+  document.getElementById('bid'+i).classList.add('sel');
+  state.chosen = state.bids[i];
+  const cb = document.getElementById('choosebtn');
+  cb.disabled = false;
+  cb.textContent = `เลือก ${state.chosen.display_name} • จ่าย ${fmt(state.chosen.price)}฿`;
+}
+
+/* ── 3) เลือกช่าง → จ่าย (QR จริง) ── */
+async function chooseBid(){
+  if(!state.chosen) return;
+  const cb = document.getElementById('choosebtn');
+  cb.disabled = true;
+  try{
+    const r = await api(`/jobs/${activeJobId()}/select/${state.chosen.id}`, {method:'POST'});
+    state.paymentId = r.payment_id;
+    document.getElementById('payname').textContent = state.chosen.display_name;
+    document.getElementById('payamt').textContent = fmt(r.amount)+'฿';
+    document.getElementById('qrimg').src = `/api/payments/${r.payment_id}/qr.png`;
+    go('pay');
+  }catch(e){ alert('เลือกช่างไม่สำเร็จ: '+e.message); cb.disabled=false; }
+}
+function showPay(j){
+  state.paymentId = j.payment.id;
+  document.getElementById('payname').textContent = j.selected ? j.selected.display_name : '—';
+  document.getElementById('payamt').textContent = fmt(j.payment.amount)+'฿';
+  document.getElementById('qrimg').src = `/api/payments/${j.payment.id}/qr.png`;
+}
+async function confirmPay(){
+  const btn = document.getElementById('paybtn');
+  btn.disabled = true; btn.textContent = 'กำลังยืนยัน…';
+  try{
+    const r = await api(`/payments/${state.paymentId}/confirm`, {method:'POST'});
+    document.getElementById('otpcode').textContent = r.customer_otp.split('').join(' ');
+    go('otp');
+  }catch(e){ alert('ยืนยันไม่สำเร็จ: '+e.message); }
+  finally{ btn.disabled=false; btn.textContent='ฉันโอนแล้ว'; }
+}
+
+/* ── 4) สถานะงาน (ลูกค้า) — จากเซิร์ฟเวอร์ล้วน ── */
+function showTrack(j){
+  const selp = j.selected || {};
+  document.getElementById('trkava').textContent = avaOf(selp.display_name||'');
+  document.getElementById('trkname').textContent = selp.display_name || '—';
+  document.getElementById('trkmeta').textContent =
+    `${j.category_name} • ${selp.price?fmt(selp.price)+'฿':''} (${j.payment&&j.payment.status==='paid'?'พักใน escrow':'รอชำระ'})`;
+  const order = ['assigned','in_progress','done','confirmed'];
+  let cur = order.indexOf(j.status); if(j.status==='settled') cur = 4;
+  const steps = [
+    {t1:'จ่ายเงินเข้าระบบแล้ว', t2:'เงินพักปลอดภัยใน escrow'},
+    {t1:'ช่างยืนยันรหัสเริ่มงาน', t2:'ช่างถึงหน้างานและกรอก OTP แล้ว'},
+    {t1:'ช่างทำงานเสร็จ ส่งรูปผลงาน', t2:'รอคุณตรวจงาน'},
+    {t1:'ยืนยันงาน ปล่อยเงินให้ช่าง', t2:'ถ้าไม่กดภายใน 24 ชม. ระบบยืนยันให้อัตโนมัติ'},
+  ];
+  document.getElementById('timeline').innerHTML = steps.map((s,i)=>
+    `<div class="st ${i<cur?'done':(i===cur?'now':'')}"><div class="dot"></div>
+      <div><div class="t1">${s.t1}</div><div class="t2">${s.t2}</div></div></div>`).join('');
+  const extra = document.getElementById('trkextra');
+  let x = '';
+  if(j.status==='assigned' && j.otp)
+    x += `<div class="escrow warn">🔑 <span>รหัสเริ่มงานของคุณ: <b style="font-size:16px;letter-spacing:2px">${esc(j.otp)}</b> — บอกช่างเมื่อมาถึงเท่านั้น</span></div>`;
+  if(j.photos && j.photos.length)
+    x += `<div class="card"><div style="font-family:'Mitr';font-size:14px">รูปประกอบงาน</div>
+          <div class="thumbs" style="margin:8px 0 0">${j.photos.map(p=>`<img src="${p}">`).join('')}</div></div>`;
+  if(j.voice_note_url)
+    x += `<div class="card"><div style="font-family:'Mitr';font-size:14px">เสียงเล่างาน</div><audio controls src="${j.voice_note_url}"></audio></div>`;
+  extra.innerHTML = x;
+  const act = document.getElementById('trkactions');
+  if(j.status==='done'){
+    act.innerHTML = `<button class="btn" onclick="approveJob(this)">✓ ยืนยันงานเสร็จ ปล่อยเงินให้ช่าง</button>`;
+  }else if(j.status==='in_progress'){
+    act.innerHTML = `<div class="note">ช่างกำลังทำงานอยู่ — กด ⟳ มุมขวาบนเพื่ออัปเดต</div>`;
+  }else if(j.status==='assigned'){
+    act.innerHTML = `<div class="note">รอช่างมาถึงและกรอกรหัสเริ่มงาน</div>`;
+  }else{ act.innerHTML = ''; }
+}
+async function approveJob(btn){
+  btn.disabled = true; btn.textContent = 'กำลังปล่อยเงิน…';
+  try{
+    await api(`/jobs/${activeJobId()}/approve`, {method:'POST'});
+    await openActiveJob();
+  }catch(e){ alert('ยืนยันไม่สำเร็จ: '+e.message); btn.disabled=false; }
+}
+
+/* ── 5) จบงาน + รีวิวจริง ── */
+function showDone(j){
+  const s = j.settlement || {};
+  document.getElementById('donemsg').textContent =
+    `โอนเงินให้${j.selected?j.selected.display_name:''}แล้ว • ขอบคุณที่ใช้เอิ้นได้`;
+  document.getElementById('splitbox').innerHTML = s.gross ? `
+    <div style="font-family:'Mitr';margin-bottom:4px">💸 การแบ่งเงินจากระบบ settlement</div>
+    <div class="r"><span>ยอดงาน (gross)</span><span>${(+s.gross).toFixed(2)}฿</span></div>
+    <div class="r" style="color:var(--green-dark)"><span>ช่างได้รับ (89%)</span><span>${(+s.provider_net).toFixed(2)}฿</span></div>
+    <div class="r"><span>ค่าระบบ (8%)</span><span>${(+s.platform_fee).toFixed(2)}฿</span></div>
+    <div class="r"><span>กองทุนชุมชน (2%)</span><span>${(+s.fund_amount).toFixed(2)}฿</span></div>
+    <div class="r"><span>ภาษีหัก ณ ที่จ่าย (1%)</span><span>${(+s.tax_withheld).toFixed(2)}฿</span></div>` : '';
+  document.getElementById('fundline').innerHTML = s.fund_amount ?
+    `🌱 <span>งานนี้ส่งเงิน <b>${(+s.fund_amount).toFixed(2)} บาท</b> เข้ากองทุนชุมชน ต.${esc(j.tambon_name)}</span>` : '';
+  const rc = document.getElementById('reviewcard');
+  if(j.review){
+    rc.innerHTML = `<div style="font-family:'Mitr';font-size:15px">รีวิวของคุณ</div>
+      <div class="stars">${'★'.repeat(j.review.rating).split('').map(()=>'<span class="on">★</span>').join('')}</div>
+      ${j.review.comment?`<div class="note">"${esc(j.review.comment)}"</div>`:''}
+      <div class="note" style="color:var(--green-dark)">บันทึกแล้ว — คะแนนช่างอัปเดตในระบบ</div>`;
+  }else{
+    document.getElementById('ratehead').textContent =
+      `ให้คะแนน${j.selected?j.selected.display_name:'ช่าง'}หน่อยครับ`;
+    state.rating = 0;
+    document.querySelectorAll('#stars span').forEach(sp=>sp.classList.remove('on'));
+  }
+}
+function rate(n){
+  state.rating = n;
+  document.querySelectorAll('#stars span').forEach((s,i)=>s.classList.toggle('on',i<n));
+}
+async function submitReview(){
+  if(!state.rating) return alert('แตะดาวให้คะแนนก่อนครับ');
+  const btn = document.getElementById('reviewbtn');
+  btn.disabled = true;
+  try{
+    const r = await api(`/jobs/${activeJobId()}/reviews`, {method:'POST',
+      body:{rating: state.rating, comment: document.getElementById('reviewtext').value.trim()||null}});
+    document.getElementById('reviewcard').innerHTML =
+      `<div style="font-family:'Mitr';font-size:15px">🙏 ขอบคุณสำหรับรีวิว!</div>
+       <div class="note">คะแนนช่างตอนนี้ ★ ${(+r.rating_avg).toFixed(2)} (${r.rating_count} รีวิว) — อัปเดตจริงในฐานข้อมูล</div>`;
+    loadTopProviders();
+  }catch(e){ alert('ส่งรีวิวไม่สำเร็จ: '+e.message); btn.disabled=false; }
+}
+
+/* ── งานของฉัน (ลูกค้า) ── */
+async function loadMyJobs(){
+  const box = document.getElementById('myjoblist');
+  try{
+    const rows = await api('/my/jobs');
+    box.innerHTML = rows.length ? rows.map(j=>`
+      <div class="card prov jobitem" onclick="localStorage.setItem('aindai_job','${j.id}');openActiveJob()">
+        <div class="ava">${j.icon||'🔧'}</div>
+        <div><div class="nm">${esc(j.title)}</div>
+        <div class="meta">ต.${esc(j.tambon_name)} • ข้อเสนอ ${j.bids_count}</div></div>
+        <div class="statuschip">${STATUS_TH[j.status]||j.status}</div>
+      </div>`).join('') : '<div class="note">ยังไม่เคยประกาศงาน</div>';
+  }catch(e){ box.innerHTML = `<div class="note">โหลดไม่ได้: ${esc(e.message)}</div>`; }
+}
+
+/* ═══ ฝั่งช่าง ═══ */
+async function loadProviderHome(){
+  go('phome');
+  const mine = document.getElementById('pminelist'), open = document.getElementById('popenlist');
+  mine.innerHTML = open.innerHTML = '<div class="note">กำลังโหลด…</div>';
+  try{
+    const me = ROLES.find(r=>r.id===role);
+    const data = await api('/provider/jobs');
+    document.getElementById('pstats').innerHTML =
+      `<div style="font-family:'Mitr';font-size:16px">${me?me.label:''}</div>
+       <div style="font-size:12.5px;opacity:.85">งานเปิดรับข้อเสนอ ${data.open.length} • งานที่ได้รับ ${data.mine.length}</div>`;
+    mine.innerHTML = data.mine.length ? data.mine.map(j=>`
+      <div class="card prov jobitem" onclick="openProviderJob('${j.id}')">
+        <div class="ava">${j.icon||'🔧'}</div>
+        <div><div class="nm">${esc(j.title)}</div><div class="meta">ต.${esc(j.tambon_name)} • ${fmt(j.price)}฿</div></div>
+        <div class="statuschip">${STATUS_TH[j.status]||j.status}</div>
+      </div>`).join('') : '<div class="note">ยังไม่มีงานที่ถูกเลือก</div>';
+    open.innerHTML = data.open.length ? data.open.map((j,i)=>`
+      <div class="card">
+        <div class="prov"><div class="ava">${j.icon||'🔧'}</div>
+          <div><div class="nm">${esc(j.title)}</div>
+          <div class="meta">ต.${esc(j.tambon_name)} • งบ ${j.budget_min?fmt(j.budget_min):'?'}–${j.budget_max?fmt(j.budget_max):'?'}฿ • ${esc(j.preferred_time||'')}</div></div>
+          ${j.my_price?`<div class="tag orange">เสนอแล้ว ${fmt(j.my_price)}฿</div>`:''}
+        </div>
+        ${j.description?`<div class="msg" style="font-size:13px;color:var(--muted);margin-top:8px">"${esc(j.description)}"</div>`:''}
+        ${j.voice_note_url?`<audio controls src="${j.voice_note_url}"></audio>`:''}
+        ${j.photos&&j.photos.length?`<div class="thumbs" style="margin:8px 0 0">${j.photos.map(p=>`<img src="${p}">`).join('')}</div>`:''}
+        <button class="btn sm ghost" onclick="document.getElementById('bf${i}').classList.toggle('on')">💰 ${j.my_price?'แก้ข้อเสนอ':'เสนอราคา'}</button>
+        <div class="bidform" id="bf${i}">
+          <input id="bfp${i}" placeholder="ราคา (บาท)" inputmode="numeric" value="${j.my_price?+j.my_price:''}">
+          <input id="bfm${i}" placeholder="ข้อความถึงลูกค้า เช่น เครื่องมือพร้อม เก็บกวาดให้">
+          <input id="bfa${i}" placeholder="ไปได้เมื่อไหร่ เช่น เสาร์ 8:00">
+          <button class="btn sm" onclick="sendBid('${j.id}',${i},this)">ส่งข้อเสนอ</button>
+        </div>
+      </div>`).join('') : '<div class="note">ไม่มีงานเปิดรับข้อเสนอในพื้นที่/หมวดของคุณตอนนี้</div>';
+  }catch(e){
+    mine.innerHTML = '';
+    open.innerHTML = `<div class="note">โหลดไม่ได้: ${esc(e.message)}</div>`;
+  }
+}
+async function sendBid(jobId, i, btn){
+  const price = parseFloat(document.getElementById('bfp'+i).value);
+  if(!price || price<=0) return alert('ใส่ราคาก่อนครับ');
+  btn.disabled = true;
+  try{
+    await api(`/jobs/${jobId}/bids`, {method:'POST', body:{
+      price, message: document.getElementById('bfm'+i).value.trim()||null,
+      available_at: document.getElementById('bfa'+i).value.trim()||null}});
+    loadProviderHome();
+  }catch(e){ alert('เสนอราคาไม่สำเร็จ: '+e.message); btn.disabled=false; }
+}
+async function openProviderJob(id){
+  state.pjobId = id;
+  const box = document.getElementById('pjobbody');
+  go('pjob');
+  box.innerHTML = '<div class="note">กำลังโหลด…</div>';
+  try{
+    const j = await api('/jobs/'+id);
+    let html = `
+      <div class="card"><div class="prov"><div class="ava">${j.icon||'🔧'}</div>
+        <div><div class="nm">${esc(j.title)}</div>
+        <div class="meta">ต.${esc(j.tambon_name)} • ${j.selected?fmt(j.selected.price)+'฿':''} • ${STATUS_TH[j.status]||j.status}</div></div></div>
+        ${j.description?`<div class="msg" style="font-size:13px;color:var(--muted);margin-top:8px">"${esc(j.description)}"</div>`:''}
+        ${j.voice_note_url?`<audio controls src="${j.voice_note_url}"></audio>`:''}
+        ${j.photos&&j.photos.length?`<div class="thumbs" style="margin:8px 0 0">${j.photos.map(p=>`<img src="${p}">`).join('')}</div>`:''}
+      </div>`;
+    if(j.status==='assigned'){
+      html += `
+        <div class="escrow">🛡️ <span>ลูกค้าจ่ายเงินเข้า escrow แล้ว — ไปหน้างานแล้วขอรหัส 4 หลักจากลูกค้าเพื่อเริ่มงาน</span></div>
+        <label class="f">กรอกรหัสเริ่มงานจากลูกค้า</label>
+        <input class="inp" id="potp" maxlength="4" inputmode="numeric" placeholder="รหัส 4 หลัก" style="text-align:center;font-size:22px;letter-spacing:8px;font-family:'Mitr'">
+        <button class="btn" onclick="providerStart(this)">ยืนยันเริ่มงาน</button>`;
+    }else if(j.status==='in_progress'){
+      html += `
+        <div class="escrow">🔨 <span>กำลังทำงาน — เสร็จแล้วถ่ายรูปผลงานแนบ แล้วกดส่งงาน</span></div>
+        <div class="photo" onclick="document.getElementById('pphotoinput').click()">📷 แนบรูปผลงาน (แตะเพื่อเลือกรูป)</div>
+        <input type="file" id="pphotoinput" accept="image/*" multiple style="display:none" onchange="addWorkPhotos(this.files)">
+        <div class="thumbs" id="pworkthumbs"></div>
+        <button class="btn" onclick="providerComplete(this)">✅ ส่งงาน แจ้งลูกค้าตรวจ</button>`;
+    }else if(j.status==='done'){
+      html += `<div class="escrow warn">⏳ <span>ส่งงานแล้ว — รอลูกค้าตรวจและกดยืนยัน (ไม่กดภายใน 24 ชม. ระบบยืนยันอัตโนมัติ)</span></div>`;
+    }else if(j.status==='confirmed'||j.status==='settled'){
+      const s = j.settlement||{};
+      html += `
+        <div class="escrow">🎉 <span>ลูกค้ายืนยันแล้ว! เงินส่วนของคุณ <b>${s.provider_net?(+s.provider_net).toFixed(2):''}฿</b> (หลังหักค่าระบบ 8% + กองทุน 2% + ภาษี 1%)</span></div>
+        ${j.review?`<div class="card center"><div style="font-family:'Mitr'">รีวิวจากลูกค้า</div>
+          <div class="stars">${Array.from({length:j.review.rating},()=>'<span class="on">★</span>').join('')}</div>
+          ${j.review.comment?`<div class="note">"${esc(j.review.comment)}"</div>`:''}</div>`:''}`;
+    }
+    box.innerHTML = html;
+  }catch(e){ box.innerHTML = `<div class="note">โหลดไม่ได้: ${esc(e.message)}</div>`; }
+}
+let workPhotos = [];
+async function addWorkPhotos(files){
+  const box = document.getElementById('pworkthumbs');
+  for(const f of files){
+    try{
+      const url = await uploadFile(f);
+      workPhotos.push(url);
+      box.innerHTML += `<img src="${url}" alt="รูปผลงาน">`;
+    }catch(e){ alert('อัปโหลดรูปไม่สำเร็จ: '+e.message); }
+  }
+}
+async function providerStart(btn){
+  const otp = document.getElementById('potp').value.trim();
+  if(otp.length !== 4) return alert('กรอกรหัส 4 หลักจากลูกค้าก่อนครับ');
+  btn.disabled = true;
+  try{
+    await api(`/jobs/${state.pjobId}/start`, {method:'POST', body:{otp}});
+    openProviderJob(state.pjobId);
+  }catch(e){ alert(e.message); btn.disabled=false; }
+}
+async function providerComplete(btn){
+  btn.disabled = true; btn.textContent = 'กำลังส่งงาน…';
+  try{
+    await api(`/jobs/${state.pjobId}/complete`, {method:'POST', body:{photos: workPhotos}});
+    workPhotos = [];
+    openProviderJob(state.pjobId);
+  }catch(e){ alert(e.message); btn.disabled=false; btn.textContent='✅ ส่งงาน แจ้งลูกค้าตรวจ'; }
+}
+
+boot();
+</script>
+</div>
+</body>
+</html>

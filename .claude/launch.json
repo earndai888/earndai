@@ -1,0 +1,21 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "ain-dai-backend",
+      "runtimeExecutable": "C:\\Users\\ลำเต้ย\\Downloads\\ain-dai\\ain-dai-backend\\.venv\\Scripts\\python.exe",
+      "runtimeArgs": [
+        "-m",
+        "uvicorn",
+        "--app-dir",
+        "C:\\Users\\ลำเต้ย\\Downloads\\ain-dai\\ain-dai-backend",
+        "app.main:app",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8000"
+      ],
+      "port": 8000
+    }
+  ]
+}

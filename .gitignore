@@ -1,0 +1,11 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# ค่าลับ — ห้าม commit (LINE keys, PromptPay, DB password)
+.env
+
+# ไฟล์ผู้ใช้อัปโหลด
+ain-dai-backend/uploads/
