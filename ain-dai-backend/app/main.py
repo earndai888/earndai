@@ -67,6 +67,16 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=UPLOAD_DIR), name="uploads")
 
 
+app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
 @app.get("/", include_in_schema=False)
 async def index():
+    """หน้าลูกค้า"""
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/provider", include_in_schema=False)
+async def provider_page():
+    """หน้าช่าง"""
+    return FileResponse(STATIC_DIR / "provider.html")

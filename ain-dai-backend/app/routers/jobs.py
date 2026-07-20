@@ -31,19 +31,25 @@ async def current_user(
 ) -> dict:
     """DEV: header X-Debug-User = line_user_id | PROD: Bearer <LIFF id_token>"""
     line_user_id = None
+    liff_name = ""
     if settings.dev_mode and x_debug_user:
         line_user_id = x_debug_user
     elif authorization.startswith("Bearer "):
         profile = await line_api.verify_liff_token(authorization[7:])
         if profile:
             line_user_id = profile.get("sub")
+            liff_name = profile.get("name") or ""
     if not line_user_id:
         raise HTTPException(401, "ยืนยันตัวตนไม่สำเร็จ")
     row = await db.get_pool().fetchrow(
-        """INSERT INTO users (line_user_id, display_name) VALUES ($1, 'ผู้ใช้ใหม่')
-           ON CONFLICT (line_user_id) DO UPDATE SET line_user_id = EXCLUDED.line_user_id
+        """INSERT INTO users (line_user_id, display_name)
+           VALUES ($1, COALESCE(NULLIF($2, ''), 'ผู้ใช้ใหม่'))
+           ON CONFLICT (line_user_id) DO UPDATE
+             SET display_name = CASE
+                   WHEN users.display_name = 'ผู้ใช้ใหม่' AND NULLIF($2, '') IS NOT NULL
+                   THEN $2 ELSE users.display_name END
            RETURNING *""",
-        line_user_id,
+        line_user_id, liff_name,
     )
     return dict(row)
 
@@ -57,7 +63,71 @@ async def meta():
         "SELECT slug, name_th, icon FROM service_categories WHERE active ORDER BY id")
     tambons = await pool.fetch("SELECT id, name, amphoe FROM tambons ORDER BY id")
     return {"categories": [dict(r) for r in cats],
-            "tambons": [dict(r) for r in tambons]}
+            "tambons": [dict(r) for r in tambons],
+            "liff_id": settings.liff_id,
+            "dev_mode": settings.dev_mode}
+
+
+@router.get("/me")
+async def me(user: dict = Depends(current_user)):
+    """ข้อมูลผู้ใช้ที่ล็อกอินอยู่ + สถานะการเป็นช่าง"""
+    prov = await db.get_pool().fetchrow(
+        """SELECT p.*,
+                  (SELECT array_agg(c.slug) FROM service_categories c
+                    WHERE c.id = ANY(p.categories)) AS category_slugs
+             FROM providers p WHERE p.user_id = $1""",
+        user["id"])
+    return {
+        "line_user_id": user["line_user_id"],
+        "display_name": user["display_name"],
+        "phone": user["phone"],
+        "is_provider": bool(prov and prov["active"]),
+        "provider": {
+            "bio": prov["bio"], "promptpay_id": prov["promptpay_id"],
+            "category_slugs": prov["category_slugs"] or [],
+            "tambon_coverage": prov["tambon_coverage"],
+            "rating_avg": prov["rating_avg"], "rating_count": prov["rating_count"],
+            "jobs_done": prov["jobs_done"], "verified": prov["verified"],
+        } if prov else None,
+    }
+
+
+# ── สมัคร/แก้ไขข้อมูลช่าง ───────────────────────────────
+
+class ProviderRegisterIn(BaseModel):
+    display_name: str = Field(min_length=2, max_length=60)
+    phone: str | None = Field(default=None, max_length=20)
+    bio: str | None = Field(default=None, max_length=300)
+    promptpay_id: str | None = Field(default=None, max_length=20)
+    category_slugs: list[str] = Field(min_length=1)
+    tambon_ids: list[int] = Field(min_length=1)
+
+
+@router.post("/provider/register", status_code=201)
+async def provider_register(body: ProviderRegisterIn, user: dict = Depends(current_user)):
+    pool = db.get_pool()
+    cat_rows = await pool.fetch(
+        "SELECT id FROM service_categories WHERE slug = ANY($1::text[]) AND active",
+        list(set(body.category_slugs)))
+    if len(cat_rows) != len(set(body.category_slugs)):
+        raise HTTPException(400, "มีหมวดงานที่ไม่รู้จัก")
+    tambon_ids = list(set(body.tambon_ids))
+    tam_count = await pool.fetchval(
+        "SELECT count(*) FROM tambons WHERE id = ANY($1::int[])", tambon_ids)
+    if tam_count != len(tambon_ids):
+        raise HTTPException(400, "มีตำบลที่ไม่รู้จัก")
+    await pool.execute(
+        """INSERT INTO providers (user_id, categories, tambon_coverage, bio, promptpay_id)
+           VALUES ($1, $2, $3, $4, $5)
+           ON CONFLICT (user_id) DO UPDATE
+             SET categories = $2, tambon_coverage = $3, bio = $4,
+                 promptpay_id = $5, active = true""",
+        user["id"], [r["id"] for r in cat_rows], tambon_ids,
+        body.bio, body.promptpay_id)
+    await pool.execute(
+        "UPDATE users SET display_name = $2, phone = $3, role = 'provider' WHERE id = $1",
+        user["id"], body.display_name, body.phone)
+    return {"ok": True}
 
 
 @router.get("/providers/top")
