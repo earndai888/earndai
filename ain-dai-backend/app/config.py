@@ -19,7 +19,8 @@ class Settings(BaseSettings):
     # alias ชี้รุ่น flash ล่าสุดเสมอ — กันโมเดลเก่าโดนปลดจนบอทพัง
     gemini_model: str = "gemini-flash-latest"
     # โหมดพัฒนา: อนุญาต header X-Debug-User แทนการ verify LIFF token
-    dev_mode: bool = True
+    # (production ต้องเป็น false — เปิดเฉพาะตอนพัฒนาในเครื่อง)
+    dev_mode: bool = False
     # ความถี่ตรวจ auto-release (วินาที)
     auto_release_interval: int = 600
 
