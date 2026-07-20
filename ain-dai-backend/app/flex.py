@@ -71,7 +71,7 @@ def job_card(job: dict, category_name: str, tambon_name: str, bid_count: int = 0
             "footer": {"type": "box", "layout": "vertical", "contents": [
                 {"type": "button", "style": "primary", "color": NAVY, "height": "sm",
                  "action": {"type": "uri", "label": "💵 เสนอราคางานนี้",
-                            "uri": liff_url(f"?job={job['id']}&view=bid")}},
+                            "uri": liff_url("/provider")}},
             ]},
         },
     }

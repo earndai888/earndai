@@ -45,10 +45,22 @@ async def handle_event(event: dict) -> None:
             await line_api.reply(reply_token, [flex.open_form_message(slug)])
         return
 
+    # บอทถูกเชิญเข้ากลุ่ม/ห้อง → แนะนำวิธีผูกตำบล
+    if etype == "join":
+        await line_api.reply(reply_token, [{
+            "type": "text",
+            "text": "สวัสดีครับ 🙌 นี่คือบอทเอิ้นได้\n\nถ้าอยากให้กลุ่มนี้รับแจ้งเตือนงานใหม่ในตำบล ให้พิมพ์:\nผูกตำบล <ชื่อตำบล>\nเช่น \"ผูกตำบลโพธิ์\"\n\nเลิกรับแจ้งเตือน พิมพ์: เลิกผูกตำบล"}])
+        return
+
     if etype == "message" and event["message"].get("type") == "text":
-        # ตอบเฉพาะแชท 1:1 — ในกลุ่มช่าง bot มีหน้าที่ส่งการ์ดงานอย่างเดียว
-        if src.get("type") != "user":
+        text = event["message"]["text"].strip()
+
+        # ในกลุ่ม/ห้อง: รับเฉพาะคำสั่งผูก/เลิกผูกตำบล
+        if src.get("type") in ("group", "room"):
+            gid = src.get("groupId") or src.get("roomId")
+            await handle_group_command(reply_token, gid, text)
             return
+
         user_id = src.get("userId")
         await upsert_user(user_id)
         text = event["message"]["text"]
@@ -72,6 +84,42 @@ async def handle_event(event: dict) -> None:
             await line_api.reply(reply_token, [flex.open_form_message(result.slug)])
         else:
             await line_api.reply(reply_token, [flex.category_quick_reply()])
+
+
+async def handle_group_command(reply_token: str, group_id: str | None, text: str) -> None:
+    """ผูก/เลิกผูกกลุ่มไลน์กับตำบล เพื่อรับแจ้งเตือนงานใหม่"""
+    if not group_id:
+        return
+    pool = db.get_pool()
+
+    if text.startswith("เลิกผูกตำบล"):
+        await pool.execute(
+            "UPDATE tambon_line_groups SET active = false WHERE group_id = $1", group_id)
+        await line_api.reply(reply_token, [{"type": "text",
+            "text": "เลิกรับแจ้งเตือนงานในกลุ่มนี้แล้วครับ"}])
+        return
+
+    if text.startswith("ผูกตำบล"):
+        name = text.replace("ผูกตำบล", "", 1).strip().lstrip("ต.").strip()
+        if not name:
+            await line_api.reply(reply_token, [{"type": "text",
+                "text": "พิมพ์ชื่อตำบลต่อท้ายด้วยครับ เช่น \"ผูกตำบลโพธิ์\""}])
+            return
+        tambon = await pool.fetchrow(
+            "SELECT id, name FROM tambons WHERE name = $1 OR name ILIKE $2 LIMIT 1",
+            name, f"%{name}%")
+        if not tambon:
+            names = await pool.fetch("SELECT name FROM tambons ORDER BY id")
+            await line_api.reply(reply_token, [{"type": "text",
+                "text": "ไม่พบตำบลนี้ครับ ตำบลที่มี: " + ", ".join(r["name"] for r in names)}])
+            return
+        await pool.execute(
+            """INSERT INTO tambon_line_groups (tambon_id, group_id, active)
+               VALUES ($1, $2, true)
+               ON CONFLICT (tambon_id) DO UPDATE SET group_id = $2, active = true""",
+            tambon["id"], group_id)
+        await line_api.reply(reply_token, [{"type": "text",
+            "text": f"✅ ผูกกลุ่มนี้กับ ต.{tambon['name']} แล้ว\nงานใหม่ในตำบลนี้จะแจ้งเข้ากลุ่มอัตโนมัติครับ"}])
 
 
 async def upsert_user(line_user_id: str | None) -> None:

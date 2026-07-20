@@ -1,5 +1,6 @@
 """REST API สำหรับ LIFF Mini App — flow เต็ม: สร้างงาน → เสนอราคา → เลือก →
 จ่าย escrow → OTP เริ่มงาน → เสร็จ → ยืนยัน → สร้าง settlement → รีวิว"""
+import logging
 import secrets
 import uuid
 from datetime import date
@@ -16,6 +17,7 @@ from ..intent import CATEGORY_NAMES
 from ..settlement import FeeConfig, compute_split
 
 router = APIRouter(prefix="/api")
+log = logging.getLogger("jobs")
 
 UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "uploads"
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".gif",
@@ -196,18 +198,38 @@ async def create_job(body: JobIn, user: dict = Depends(current_user)):
 
 
 async def broadcast_job(job: dict, category_name: str) -> None:
-    """ส่งการ์ดงาน (ปิดข้อมูลลูกค้า) เข้ากลุ่มไลน์ช่างตำบล ถ้ามี"""
+    """แจ้งเตือนงานใหม่ (ปิดข้อมูลลูกค้า):
+    1) push ตรงถึงช่างทุกคนที่รับหมวด+ตำบลนี้ — ทำงานทันที ไม่ต้องตั้งกลุ่ม
+    2) ส่งเข้ากลุ่มไลน์ช่างประจำตำบล ถ้ามีลงทะเบียนไว้"""
     pool = db.get_pool()
     tambon = await pool.fetchrow("SELECT name FROM tambons WHERE id = $1", job["tambon_id"])
+    card = flex.job_card(
+        {**job, "id": str(job["id"])}, category_name, tambon["name"] if tambon else "-")
+
+    # 1) ช่างที่รับหมวดนี้และครอบคลุมตำบลนี้ (ไม่ส่งหาเจ้าของงานเอง เผื่อช่างประกาศงาน)
+    providers = await pool.fetch(
+        """SELECT DISTINCT u.line_user_id
+             FROM providers p JOIN users u ON u.id = p.user_id
+            WHERE p.active
+              AND $1 = ANY(p.categories)
+              AND $2 = ANY(p.tambon_coverage)
+              AND u.id <> $3
+              AND u.line_user_id NOT LIKE 'Udemo-%' AND u.line_user_id NOT LIKE 'Utest-%'""",
+        job["category_id"], job["tambon_id"], job["customer_id"])
+    for r in providers:
+        try:
+            await line_api.push(r["line_user_id"], [card])
+        except Exception:
+            log.warning("แจ้งเตือนช่าง %s ไม่สำเร็จ", r["line_user_id"])
+
+    # 2) กลุ่มไลน์ช่างประจำตำบล (ถ้ามี)
     group = await pool.fetchrow(
         "SELECT group_id FROM tambon_line_groups WHERE tambon_id = $1 AND active", job["tambon_id"])
     if group:
-        card = flex.job_card(
-            {**job, "id": str(job["id"])}, category_name, tambon["name"] if tambon else "-")
         try:
             await line_api.push(group["group_id"], [card])
         except Exception:
-            pass  # กลุ่มส่งไม่ได้ อย่าให้การสร้างงานล้ม — log ใน production
+            log.warning("ส่งเข้ากลุ่มตำบล %s ไม่สำเร็จ", job["tambon_id"])
 
 
 # ── เสนอราคา ────────────────────────────────────────────
