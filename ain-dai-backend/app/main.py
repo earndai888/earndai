@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import db
+from . import ai_chat, db
 from .config import settings
 from .routers import jobs, webhook
 from .routers.jobs import create_settlement
@@ -44,6 +44,7 @@ async def auto_release_loop() -> None:
 @contextlib.asynccontextmanager
 async def lifespan(app: FastAPI):
     await db.connect()
+    await ai_chat.ensure_table()  # ตารางประวัติแชท AI (สร้างอัตโนมัติถ้ายังไม่มี)
     task = asyncio.create_task(auto_release_loop())
     yield
     task.cancel()

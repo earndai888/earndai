@@ -4,7 +4,7 @@ from urllib.parse import parse_qsl
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
-from .. import db, flex, line_api
+from .. import ai_chat, db, flex, line_api
 from ..intent import classify
 
 router = APIRouter()
@@ -49,8 +49,24 @@ async def handle_event(event: dict) -> None:
         # ตอบเฉพาะแชท 1:1 — ในกลุ่มช่าง bot มีหน้าที่ส่งการ์ดงานอย่างเดียว
         if src.get("type") != "user":
             return
-        await upsert_user(src.get("userId"))
+        user_id = src.get("userId")
+        await upsert_user(user_id)
         text = event["message"]["text"]
+
+        # AI ชั้นที่ 2: คุยโต้ตอบก่อน ค่อยส่งลิงก์เมื่อคุยรู้เรื่องแล้ว
+        if ai_chat.enabled() and user_id:
+            await line_api.show_loading(user_id)
+            ai = await ai_chat.chat(user_id, text)
+            if ai:
+                messages: list[dict] = []
+                if ai["text"]:
+                    messages.append({"type": "text", "text": ai["text"]})
+                if ai["category_slug"]:
+                    messages.append(flex.open_form_message(ai["category_slug"]))
+                await line_api.reply(reply_token, messages)
+                return
+
+        # ชั้นที่ 1 (fallback): keyword matching
         result = classify(text)
         if result.confident:
             await line_api.reply(reply_token, [flex.open_form_message(result.slug)])

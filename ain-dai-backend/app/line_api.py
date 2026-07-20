@@ -30,6 +30,18 @@ async def reply(reply_token: str, messages: list[dict]) -> None:
         r.raise_for_status()
 
 
+async def show_loading(chat_id: str, seconds: int = 30) -> None:
+    """โชว์ animation "กำลังพิมพ์..." ในแชทระหว่างรอ AI ตอบ (best effort)"""
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(
+                f"{API}/chat/loading/start", headers=_headers(),
+                json={"chatId": chat_id, "loadingSeconds": seconds},
+            )
+    except Exception:
+        pass  # แค่ animation — พังก็ไม่เป็นไร
+
+
 async def push(to: str, messages: list[dict]) -> None:
     """ส่งข้อความหา user, group หรือ room id"""
     async with httpx.AsyncClient(timeout=10) as client:

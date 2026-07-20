@@ -13,6 +13,10 @@ class Settings(BaseSettings):
     # PromptPay ของแพลตฟอร์ม (เบอร์มือถือ 10 หลัก หรือเลขผู้เสียภาษี 13 หลัก)
     # เงิน escrow จะเข้าบัญชีนี้ — ตั้งเป็นของจริงใน .env ก่อนใช้งาน
     promptpay_id: str = "0899999999"
+    # AI ชั้นที่ 2 — คุยโต้ตอบผ่าน Claude ก่อนส่งลิงก์ฟอร์ม
+    # (เว้นว่าง = ปิด ใช้ keyword matching อย่างเดียว)
+    anthropic_api_key: str = ""
+    claude_model: str = "claude-opus-4-8"
     # โหมดพัฒนา: อนุญาต header X-Debug-User แทนการ verify LIFF token
     dev_mode: bool = True
     # ความถี่ตรวจ auto-release (วินาที)
