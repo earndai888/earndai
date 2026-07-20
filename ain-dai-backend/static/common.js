@@ -24,7 +24,9 @@ function loadScript(src) {
 }
 
 function liffConfigured() {
-  return META && META.liff_id && !META.liff_id.startsWith("0000000000");
+  // LIFF id จริงรูปแบบ 1234567890-AbCdEfGh (ตัด placeholder เลขศูนย์ทิ้ง)
+  const id = META && META.liff_id || "";
+  return /^\d{9,}-\w+$/.test(id) && !id.startsWith("0000000000");
 }
 
 /* คืน true = auth พร้อมใช้งาน, false = กำลัง redirect ไปล็อกอิน/ใช้ไม่ได้ */

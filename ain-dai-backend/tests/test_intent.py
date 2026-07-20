@@ -2,17 +2,15 @@ from app.intent import classify
 
 
 def test_common_phrases():
+    # นำร่องอำเภอกันทรลักษ์ 4 หมวด
     cases = {
         "หาช่างตัดหญ้าหน่อยครับ": "gardening",
         "แอร์ไม่เย็นเลย": "ac-cleaning",
-        "ท่อน้ำแตกด่วน": "plumber",
-        "ไฟดับทั้งบ้าน เบรกเกอร์ตก": "electrician",
         "อยากได้แม่บ้านทำความสะอาด": "housekeeping",
-        "ย้ายบ้าน ต้องการรถกระบะขนของ": "transport",
-        "หลังคารั่ว ฝนตกน้ำหยด": "handyman",
-        "เครื่องซักผ้าเสีย": "appliance",
-        "ส้วมตันครับ": "plumber",
         "หญ้ารกมากช่วยมาดายหญ้าที": "gardening",
+        "ล้างแอร์บ้านหน่อย": "ac-cleaning",
+        "ต้องการคนมาทำความสะอาดบ้าน": "housekeeping",
+        "เร่งด่วนมากมาตอนนี้เลยได้ไหม": "emergency",
     }
     for text, expected in cases.items():
         r = classify(text)

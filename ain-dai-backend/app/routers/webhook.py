@@ -45,11 +45,11 @@ async def handle_event(event: dict) -> None:
             await line_api.reply(reply_token, [flex.open_form_message(slug)])
         return
 
-    # บอทถูกเชิญเข้ากลุ่ม/ห้อง → แนะนำวิธีผูกตำบล
+    # บอทถูกเชิญเข้ากลุ่ม/ห้อง → แนะนำวิธีผูกหมวดงาน
     if etype == "join":
         await line_api.reply(reply_token, [{
             "type": "text",
-            "text": "สวัสดีครับ 🙌 นี่คือบอทเอิ้นได้\n\nถ้าอยากให้กลุ่มนี้รับแจ้งเตือนงานใหม่ในตำบล ให้พิมพ์:\nผูกตำบล <ชื่อตำบล>\nเช่น \"ผูกตำบลโพธิ์\"\n\nเลิกรับแจ้งเตือน พิมพ์: เลิกผูกตำบล"}])
+            "text": "สวัสดีครับ 🙌 นี่คือบอทเอิ้นได้\n\nตั้งให้กลุ่มนี้เป็นกลุ่มช่างของหมวดงาน — พิมพ์:\nผูกหมวด ช่างแอร์\n(หรือ งานสวน / แม่บ้าน / ฉุกเฉิน)\n\nงานใหม่ในหมวดนี้จะแจ้งเข้ากลุ่มอัตโนมัติ\nเลิกรับแจ้งเตือน พิมพ์: เลิกผูก"}])
         return
 
     if etype == "message" and event["message"].get("type") == "text":
@@ -87,31 +87,57 @@ async def handle_event(event: dict) -> None:
 
 
 async def handle_group_command(reply_token: str, group_id: str | None, text: str) -> None:
-    """ผูก/เลิกผูกกลุ่มไลน์กับตำบล เพื่อรับแจ้งเตือนงานใหม่"""
+    """ผูก/เลิกผูกกลุ่มไลน์กับหมวดงาน (หรือตำบล) เพื่อรับแจ้งเตือนงานใหม่"""
     if not group_id:
         return
     pool = db.get_pool()
 
-    if text.startswith("เลิกผูกตำบล"):
+    if text.startswith("เลิกผูก"):
+        await pool.execute(
+            "UPDATE category_line_groups SET active = false WHERE group_id = $1", group_id)
         await pool.execute(
             "UPDATE tambon_line_groups SET active = false WHERE group_id = $1", group_id)
         await line_api.reply(reply_token, [{"type": "text",
             "text": "เลิกรับแจ้งเตือนงานในกลุ่มนี้แล้วครับ"}])
         return
 
+    if text.startswith("ผูกหมวด"):
+        name = text.replace("ผูกหมวด", "", 1).strip()
+        if not name:
+            cats = await pool.fetch("SELECT name_th FROM service_categories WHERE active ORDER BY id")
+            await line_api.reply(reply_token, [{"type": "text",
+                "text": "พิมพ์ชื่อหมวดต่อท้ายครับ เช่น \"ผูกหมวด ช่างแอร์\"\nหมวดที่มี: " +
+                        ", ".join(r["name_th"] for r in cats)}])
+            return
+        cat = await pool.fetchrow(
+            "SELECT id, name_th FROM service_categories WHERE active AND name_th ILIKE $1 LIMIT 1",
+            f"%{name}%")
+        if not cat:
+            cats = await pool.fetch("SELECT name_th FROM service_categories WHERE active ORDER BY id")
+            await line_api.reply(reply_token, [{"type": "text",
+                "text": "ไม่พบหมวดนี้ครับ หมวดที่มี: " + ", ".join(r["name_th"] for r in cats)}])
+            return
+        await pool.execute(
+            """INSERT INTO category_line_groups (category_id, group_id, active)
+               VALUES ($1, $2, true)
+               ON CONFLICT (category_id) DO UPDATE SET group_id = $2, active = true""",
+            cat["id"], group_id)
+        await line_api.reply(reply_token, [{"type": "text",
+            "text": f"✅ ตั้งกลุ่มนี้เป็นกลุ่มช่าง \"{cat['name_th']}\" แล้ว\nงานใหม่หมวดนี้จะแจ้งเข้ากลุ่มอัตโนมัติครับ"}])
+        return
+
     if text.startswith("ผูกตำบล"):
         name = text.replace("ผูกตำบล", "", 1).strip().lstrip("ต.").strip()
         if not name:
             await line_api.reply(reply_token, [{"type": "text",
-                "text": "พิมพ์ชื่อตำบลต่อท้ายด้วยครับ เช่น \"ผูกตำบลโพธิ์\""}])
+                "text": "พิมพ์ชื่อตำบลต่อท้ายด้วยครับ เช่น \"ผูกตำบลเมือง\""}])
             return
         tambon = await pool.fetchrow(
             "SELECT id, name FROM tambons WHERE name = $1 OR name ILIKE $2 LIMIT 1",
             name, f"%{name}%")
         if not tambon:
-            names = await pool.fetch("SELECT name FROM tambons ORDER BY id")
             await line_api.reply(reply_token, [{"type": "text",
-                "text": "ไม่พบตำบลนี้ครับ ตำบลที่มี: " + ", ".join(r["name"] for r in names)}])
+                "text": "ไม่พบตำบลนี้ครับ ลองพิมพ์ \"ผูกหมวด <ชื่อหมวด>\" แทน"}])
             return
         await pool.execute(
             """INSERT INTO tambon_line_groups (tambon_id, group_id, active)

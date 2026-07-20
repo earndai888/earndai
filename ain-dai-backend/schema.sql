@@ -188,6 +188,14 @@ CREATE TABLE tambon_line_groups (
   active     boolean NOT NULL DEFAULT true
 );
 
+-- กลุ่มไลน์ช่างแยกตามหมวดงาน (นำร่อง: 1 หมวด = 1 กลุ่ม)
+CREATE TABLE category_line_groups (
+  id           serial PRIMARY KEY,
+  category_id  int UNIQUE REFERENCES service_categories(id),
+  group_id     text NOT NULL,
+  active       boolean NOT NULL DEFAULT true
+);
+
 -- ── Indexes ────────────────────────────────────────────
 
 CREATE INDEX idx_jobs_match      ON jobs (status, tambon_id, category_id);
@@ -202,23 +210,35 @@ CREATE INDEX idx_points_user     ON points_ledger (user_id);
 
 INSERT INTO fee_config (effective_from) VALUES (CURRENT_DATE);
 
+-- นำร่องอำเภอกันทรลักษ์ 4 หมวดงาน
 INSERT INTO service_categories (slug, name_th, icon) VALUES
-  ('electrician',  'ช่างไฟฟ้า',        '💡'),
-  ('plumber',      'ช่างประปา',        '🚰'),
-  ('ac-cleaning',  'ล้างแอร์',          '❄️'),
-  ('appliance',    'ซ่อมเครื่องใช้ไฟฟ้า', '🔌'),
-  ('housekeeping', 'แม่บ้าน',           '🧹'),
-  ('transport',    'รถรับจ้าง',         '🛻'),
-  ('gardening',    'ตัดหญ้า-จัดสวน',    '🌿'),
-  ('handyman',     'ช่างซ่อมทั่วไป',     '🔧'),
-  ('other',        'บริการอื่นๆ',        '➕');
+  ('ac-cleaning',  'ช่างแอร์',           '❄️'),
+  ('gardening',    'งานสวน/ตัดหญ้า',     '🌿'),
+  ('housekeeping', 'แม่บ้าน',            '🧹'),
+  ('emergency',    'งานฉุกเฉิน 24 ชม.',  '🚨');
 
+-- ตำบลในอำเภอกันทรลักษ์ จ.ศรีสะเกษ (20 ตำบล)
 INSERT INTO tambons (name, amphoe) VALUES
-  ('เมืองเหนือ',  'เมืองศรีสะเกษ'),
-  ('เมืองใต้',    'เมืองศรีสะเกษ'),
-  ('โพธิ์',       'เมืองศรีสะเกษ'),
-  ('หญ้าปล้อง',  'เมืองศรีสะเกษ'),
-  ('ซำ',         'เมืองศรีสะเกษ');
+  ('บึงมะลู',      'กันทรลักษ์'),
+  ('กุดเสลา',      'กันทรลักษ์'),
+  ('เมือง',        'กันทรลักษ์'),
+  ('สังเม็ก',      'กันทรลักษ์'),
+  ('น้ำอ้อม',      'กันทรลักษ์'),
+  ('ละลาย',        'กันทรลักษ์'),
+  ('รุง',          'กันทรลักษ์'),
+  ('ตระกาจ',       'กันทรลักษ์'),
+  ('จานใหญ่',      'กันทรลักษ์'),
+  ('ภูเงิน',       'กันทรลักษ์'),
+  ('ชำ',           'กันทรลักษ์'),
+  ('กระแชง',       'กันทรลักษ์'),
+  ('โนนสำราญ',     'กันทรลักษ์'),
+  ('หนองหญ้าลาด',  'กันทรลักษ์'),
+  ('เสาธงชัย',     'กันทรลักษ์'),
+  ('ขนุน',         'กันทรลักษ์'),
+  ('สวนกล้วย',     'กันทรลักษ์'),
+  ('เวียงเหนือ',   'กันทรลักษ์'),
+  ('ทุ่งใหญ่',     'กันทรลักษ์'),
+  ('ภูผาหมอก',     'กันทรลักษ์');
 
 -- ตัวอย่างการคำนวณ settlement แบบ ก (ทำใน backend):
 --   gross = 1000.00

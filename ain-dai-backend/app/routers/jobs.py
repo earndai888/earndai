@@ -63,7 +63,12 @@ async def meta():
     pool = db.get_pool()
     cats = await pool.fetch(
         "SELECT slug, name_th, icon FROM service_categories WHERE active ORDER BY id")
-    tambons = await pool.fetch("SELECT id, name, amphoe FROM tambons ORDER BY id")
+    if settings.pilot_amphoe:
+        tambons = await pool.fetch(
+            "SELECT id, name, amphoe FROM tambons WHERE amphoe = $1 ORDER BY name",
+            settings.pilot_amphoe)
+    else:
+        tambons = await pool.fetch("SELECT id, name, amphoe FROM tambons ORDER BY id")
     return {"categories": [dict(r) for r in cats],
             "tambons": [dict(r) for r in tambons],
             "liff_id": settings.liff_id,
@@ -222,7 +227,17 @@ async def broadcast_job(job: dict, category_name: str) -> None:
         except Exception:
             log.warning("แจ้งเตือนช่าง %s ไม่สำเร็จ", r["line_user_id"])
 
-    # 2) กลุ่มไลน์ช่างประจำตำบล (ถ้ามี)
+    # 2) กลุ่มไลน์ช่างแยกตามหมวดงาน (นำร่อง 4 หมวด = 4 กลุ่ม)
+    cgroup = await pool.fetchrow(
+        "SELECT group_id FROM category_line_groups WHERE category_id = $1 AND active",
+        job["category_id"])
+    if cgroup:
+        try:
+            await line_api.push(cgroup["group_id"], [card])
+        except Exception:
+            log.warning("ส่งเข้ากลุ่มหมวด %s ไม่สำเร็จ", job["category_id"])
+
+    # 3) กลุ่มไลน์ช่างประจำตำบล (ถ้ามี)
     group = await pool.fetchrow(
         "SELECT group_id FROM tambon_line_groups WHERE tambon_id = $1 AND active", job["tambon_id"])
     if group:
