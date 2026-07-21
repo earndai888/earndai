@@ -36,6 +36,10 @@ h1,h2,h3,.btn,.brand,.navitem{font-family:'Mitr',sans-serif;font-weight:500}
 
 /* ══ เนื้อหา ══ */
 .main{margin-left:var(--side);padding:22px 24px 70px;max-width:1180px}
+.page{display:none}
+.page.on{display:block;animation:fade .18s ease}
+@keyframes fade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.page.on{animation:none}}
 .phead{margin-bottom:16px}
 .phead h1{font-size:22px}
 .phead p{color:var(--muted);font-size:13.5px;margin-top:3px}
