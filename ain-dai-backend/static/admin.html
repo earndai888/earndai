@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>เอิ้นได้ — ระบบหลังบ้านแอดมิน</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Mitr:wght@400;500;600&family=Noto+Sans+Thai:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--green:#2BA84A;--green-dark:#188A38;--green-pale:#E8F5EC;--navy:#1E3A5F;
+      --orange:#F7941D;--orange-pale:#FEF3E2;--bg:#F5F8F4;--card:#fff;--line:#E2E9E0;
+      --muted:#68776C;--danger:#D64545;--danger-pale:#FDECEC;--r:12px}
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:var(--bg);font-family:'Noto Sans Thai',sans-serif;color:var(--navy);font-size:14px}
+h1,h2,h3,.btn,.tab{font-family:'Mitr',sans-serif;font-weight:500}
+.wrap{max-width:1280px;margin:0 auto;padding:0 16px 60px}
+
+header{background:var(--navy);color:#fff;padding:14px 0;margin-bottom:18px}
+header .wrap{display:flex;align-items:center;gap:14px;padding-bottom:0}
+header h1{font-size:20px}
+header .sp{margin-left:auto;font-size:13px;opacity:.85}
+.logout{background:rgba(255,255,255,.15);border:none;color:#fff;border-radius:999px;
+        padding:6px 14px;cursor:pointer;font-family:'Noto Sans Thai';font-size:13px}
+
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px}
+.tab{background:var(--card);border:1px solid var(--line);border-radius:999px;padding:8px 16px;
+     cursor:pointer;color:var(--navy);font-size:14px}
+.tab.on{background:var(--green);border-color:var(--green);color:#fff}
+.tab .badge{background:var(--danger);color:#fff;border-radius:999px;padding:0 7px;
+            font-size:11px;margin-left:6px}
+.page{display:none}.page.on{display:block}
+
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px}
+.kpi .lb{font-size:12.5px;color:var(--muted)}
+.kpi .v{font-family:'Mitr';font-size:24px;font-weight:600;margin-top:2px}
+.kpi.hl{background:var(--navy);color:#fff;border:none}
+.kpi.hl .lb{color:rgba(255,255,255,.8)}
+.kpi.warn{background:var(--orange-pale);border-color:var(--orange)}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+      padding:16px;margin-bottom:16px}
+.card h2{font-size:16px;margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{text-align:left;padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:'Mitr';font-weight:500;color:var(--muted);font-size:12.5px;white-space:nowrap}
+tr:last-child td{border-bottom:none}
+tbody tr:hover{background:var(--green-pale)}
+
+.btn{border:none;border-radius:999px;padding:7px 14px;cursor:pointer;font-size:13px;
+     background:var(--green);color:#fff}
+.btn:hover{opacity:.9}
+.btn.sm{padding:5px 11px;font-size:12.5px}
+.btn.ghost{background:var(--card);border:1.5px solid var(--green);color:var(--green-dark)}
+.btn.navy{background:var(--navy)}
+.btn.warn{background:var(--orange)}
+.btn.danger{background:var(--danger)}
+.btn:disabled{opacity:.5;cursor:default}
+.chip{display:inline-block;background:var(--green-pale);color:var(--green-dark);
+      border-radius:999px;padding:2px 10px;font-size:12px;margin:2px 3px 2px 0}
+.chip.gray{background:#EEF1EE;color:var(--muted)}
+.chip.warn{background:var(--orange-pale);color:#8A5A10}
+.chip.danger{background:var(--danger-pale);color:var(--danger)}
+.chip.sel{background:var(--green);color:#fff;cursor:pointer}
+.chip.pick{cursor:pointer;background:#EEF1EE;color:var(--muted)}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+select,input[type=text],input[type=password],textarea{background:var(--card);border:1px solid var(--line);
+  border-radius:8px;padding:8px 11px;font-family:'Noto Sans Thai';font-size:13.5px;color:var(--navy)}
+textarea{width:100%;min-height:64px;resize:vertical}
+.muted{color:var(--muted);font-size:13px}
+.right{text-align:right}
+.thumbs img{width:120px;height:90px;object-fit:cover;border-radius:8px;border:1px solid var(--line);
+            margin:4px 6px 0 0;cursor:zoom-in}
+.thumbs img.zoom{width:auto;max-width:100%;height:auto;cursor:zoom-out}
+
+/* drawer */
+.drawer{position:fixed;inset:0;background:rgba(30,58,95,.45);display:none;z-index:50}
+.drawer.on{display:block}
+.drawer .panel{position:absolute;right:0;top:0;bottom:0;width:min(560px,100%);background:var(--bg);
+               overflow-y:auto;padding:20px;box-shadow:-4px 0 24px rgba(0,0,0,.15)}
+.drawer h2{font-size:18px;margin-bottom:4px}
+.drawer .close{float:right;background:none;border:none;font-size:22px;cursor:pointer;color:var(--muted)}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+label.f{display:block;font-family:'Mitr';font-size:13.5px;margin:14px 0 6px}
+
+/* login */
+.login{max-width:380px;margin:80px auto;background:var(--card);border:1px solid var(--line);
+       border-radius:var(--r);padding:28px;text-align:center}
+.login h1{font-size:22px;color:var(--green-dark);margin-bottom:6px}
+.login input{width:100%;margin:14px 0;text-align:center}
+.login .btn{width:100%}
+.err{color:var(--danger);font-size:13px;margin-top:8px;min-height:18px}
+.late{color:var(--danger);font-weight:600}
+</style>
+</head>
+<body>
+
+<!-- ═══ ล็อกอิน ═══ -->
+<div id="login" class="login">
+  <h1>เอิ้นได้ <span style="color:var(--navy)">แอดมิน</span></h1>
+  <div class="muted">ใส่รหัสแอดมินเพื่อเข้าระบบหลังบ้าน</div>
+  <input type="password" id="tok" placeholder="ADMIN_TOKEN" onkeydown="if(event.key==='Enter')login()">
+  <button class="btn" onclick="login()">เข้าสู่ระบบ</button>
+  <div class="err" id="loginerr"></div>
+</div>
+
+<!-- ═══ แอป ═══ -->
+<div id="app" style="display:none">
+<header><div class="wrap">
+  <h1>เอิ้นได้ · ระบบหลังบ้าน</h1>
+  <span class="sp" id="scope"></span>
+  <button class="logout" onclick="logout()">ออกจากระบบ</button>
+</div></header>
+
+<div class="wrap">
+  <div class="tabs">
+    <button class="tab on" data-page="overview" onclick="tab('overview')">📈 ภาพรวม</button>
+    <button class="tab" data-page="approve" onclick="tab('approve')">👨‍🔧 อนุมัติช่าง<span class="badge" id="bPending" style="display:none"></span></button>
+    <button class="tab" data-page="directory" onclick="tab('directory')">🗂️ ทะเบียนช่าง</button>
+    <button class="tab" data-page="jobs" onclick="tab('jobs')">📊 กระดานงาน</button>
+    <button class="tab" data-page="finance" onclick="tab('finance')">💰 การเงิน</button>
+    <button class="tab" data-page="disputes" onclick="tab('disputes')">🚨 ข้อพิพาท<span class="badge" id="bDispute" style="display:none"></span></button>
+  </div>
+
+  <!-- 6. ภาพรวม -->
+  <section class="page on" id="p-overview">
+    <div class="kpis" id="kpis"></div>
+    <div class="card">
+      <h2>งานแยกตามหมวด</h2>
+      <div id="byCat"></div>
+    </div>
+    <div class="card">
+      <h2>งานแยกตามตำบล (ความหนาแน่นพื้นที่)</h2>
+      <div id="byTambon"></div>
+    </div>
+    <div class="card">
+      <h2>ส่งออกข้อมูล (CSV เปิดด้วย Excel ได้)</h2>
+      <div class="row">
+        <button class="btn ghost" onclick="dl('jobs')">📥 รายงานงานทั้งหมด</button>
+        <button class="btn ghost" onclick="dl('settlements')">📥 รายงานภาษี/แบ่งรายได้</button>
+        <button class="btn ghost" onclick="dl('fund')">📥 กองทุนชุมชน 2%</button>
+        <button class="btn ghost" onclick="dl('providers')">📥 ทะเบียนช่าง</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 1. อนุมัติช่าง -->
+  <section class="page" id="p-approve">
+    <div class="filters">
+      <select id="fApprove" onchange="loadApprove()">
+        <option value="pending">รออนุมัติ</option>
+        <option value="info_requested">ขอเอกสารเพิ่ม</option>
+        <option value="rejected">ปฏิเสธแล้ว</option>
+      </select>
+      <button class="btn sm ghost" onclick="loadApprove()">⟳ รีเฟรช</button>
+    </div>
+    <div class="card"><div id="approveList" class="muted">กำลังโหลด…</div></div>
+  </section>
+
+  <!-- 2. ทะเบียนช่าง -->
+  <section class="page" id="p-directory">
+    <div class="filters">
+      <select id="fStatus" onchange="loadDirectory()">
+        <option value="approved">อนุมัติแล้ว</option>
+        <option value="suspended">ถูกระงับ</option>
+        <option value="all">ทั้งหมด</option>
+      </select>
+      <select id="fCat" onchange="loadDirectory()"><option value="">ทุกหมวด</option></select>
+      <select id="fTambon" onchange="loadDirectory()"><option value="">ทุกตำบล</option></select>
+      <input type="text" id="fQ" placeholder="ค้นหาชื่อ/เบอร์" onkeydown="if(event.key==='Enter')loadDirectory()">
+      <button class="btn sm ghost" onclick="loadDirectory()">ค้นหา</button>
+    </div>
+    <div class="card"><div id="dirList" class="muted">กำลังโหลด…</div></div>
+  </section>
+
+  <!-- 3. กระดานงาน -->
+  <section class="page" id="p-jobs">
+    <div class="tabs">
+      <button class="tab on" data-jt="new" onclick="jobTab('new')">📥 งานเข้าใหม่/รอรับ</button>
+      <button class="tab" data-jt="active" onclick="jobTab('active')">🛠️ กำลังดำเนินการ</button>
+      <button class="tab" data-jt="done" onclick="jobTab('done')">🏆 ปิดจ๊อบแล้ว</button>
+      <button class="tab" data-jt="problem" onclick="jobTab('problem')">⚠️ มีปัญหา/ยกเลิก</button>
+    </div>
+    <div class="card"><div id="jobList" class="muted">กำลังโหลด…</div></div>
+  </section>
+
+  <!-- 4. การเงิน -->
+  <section class="page" id="p-finance">
+    <div class="kpis" id="finKpis"></div>
+    <div class="card"><h2>💵 เงินพักใน Escrow (รอปล่อยให้ช่าง)</h2><div id="escrowList"></div></div>
+    <div class="card"><h2>🏦 รายการแบ่งรายได้ / รอโอนช่าง</h2><div id="payoutList"></div></div>
+    <div class="card"><h2>🌱 กองทุนภัยพิบัติและดูแลชุมชน 2%</h2><div id="fundList"></div></div>
+  </section>
+
+  <!-- 5. ข้อพิพาท -->
+  <section class="page" id="p-disputes">
+    <div class="filters">
+      <select id="fDispute" onchange="loadDisputes()">
+        <option value="open">เคสเปิดอยู่</option>
+        <option value="all">ทั้งหมด</option>
+      </select>
+      <button class="btn sm ghost" onclick="loadDisputes()">⟳ รีเฟรช</button>
+    </div>
+    <div class="card"><div id="disputeList" class="muted">กำลังโหลด…</div></div>
+  </section>
+</div>
+</div>
+
+<!-- drawer ตรวจเอกสารช่าง -->
+<div class="drawer" id="drawer" onclick="if(event.target===this)closeDrawer()">
+  <div class="panel" id="drawerBody"></div>
+</div>
+
+<script>
+let TOKEN = localStorage.getItem('aindai_admin_token') || '';
+let META = null, CURRENT = null, JOBTAB = 'new';
+
+const STATUS_TH = {bidding:'รอข้อเสนอ',assigned:'จ่ายแล้ว รอเริ่มงาน',in_progress:'กำลังทำงาน',
+  done:'รอลูกค้าตรวจ',confirmed:'จบงานแล้ว',settled:'โอนเงินแล้ว',cancelled:'ยกเลิก',
+  expired:'หมดอายุ',disputed:'มีข้อพิพาท'};
+const APPROVAL_TH = {pending:'รออนุมัติ',approved:'อนุมัติแล้ว',rejected:'ปฏิเสธ',info_requested:'ขอเอกสารเพิ่ม'};
+const TIER_TH = {1:'Level 1 · Newbie',2:'Level 2 · Verified',3:'Level 3 · Master'};
+
+function esc(s){const d=document.createElement('div');d.textContent=s==null?'':String(s);return d.innerHTML}
+function money(n){return (+(n||0)).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function num(n){return (+(n||0)).toLocaleString('th-TH')}
+function dt(s){return s? new Date(s).toLocaleString('th-TH',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):'-'}
+
+async function api(path,opt={}){
+  const res = await fetch('/api/admin'+path,{
+    method:opt.method||'GET',
+    headers:{'Content-Type':'application/json','X-Admin-Token':TOKEN},
+    body:opt.body?JSON.stringify(opt.body):undefined});
+  const data = await res.json().catch(()=>({}));
+  if(!res.ok) throw new Error(typeof data.detail==='string'?data.detail:JSON.stringify(data.detail||res.status));
+  return data;
+}
+
+/* ── ล็อกอิน ── */
+async function login(){
+  const t = document.getElementById('tok').value.trim();
+  if(!t) return;
+  TOKEN = t;
+  try{
+    await api('/summary');
+    localStorage.setItem('aindai_admin_token',t);
+    start();
+  }catch(e){ document.getElementById('loginerr').textContent = e.message; TOKEN=''; }
+}
+function logout(){ localStorage.removeItem('aindai_admin_token'); location.reload(); }
+
+async function start(){
+  document.getElementById('login').style.display='none';
+  document.getElementById('app').style.display='block';
+  META = await (await fetch('/api/meta')).json();
+  document.getElementById('scope').textContent = 'อ.' + (META.tambons[0]?.amphoe||'-') +
+    ' · ' + META.categories.length + ' หมวดงาน';
+  document.getElementById('fCat').innerHTML = '<option value="">ทุกหมวด</option>' +
+    META.categories.map(c=>`<option value="${c.slug}">${esc(c.name_th)}</option>`).join('');
+  document.getElementById('fTambon').innerHTML = '<option value="">ทุกตำบล</option>' +
+    META.tambons.map(t=>`<option value="${t.id}">ต.${esc(t.name)}</option>`).join('');
+  loadOverview();
+}
+
+function tab(p){
+  document.querySelectorAll('.tabs .tab[data-page]').forEach(t=>t.classList.toggle('on',t.dataset.page===p));
+  document.querySelectorAll('.page').forEach(s=>s.classList.toggle('on',s.id==='p-'+p));
+  ({overview:loadOverview,approve:loadApprove,directory:loadDirectory,
+    jobs:()=>jobTab(JOBTAB),finance:loadFinance,disputes:loadDisputes})[p]();
+}
+
+/* ── 6. ภาพรวม ── */
+async function loadOverview(){
+  const s = await api('/summary');
+  const emer = s.emergency_response_min;
+  document.getElementById('kpis').innerHTML = `
+    ${kpi('งานสำเร็จทั้งหมด', num(s.jobs_done), 'hl')}
+    ${kpi('มูลค่าเศรษฐกิจหมุนเวียน (GMV)', money(s.gmv)+' ฿','hl')}
+    ${kpi('รายได้ที่ถึงมือช่าง', money(s.provider_income)+' ฿')}
+    ${kpi('กองทุนชุมชน 2%', money(s.fund_total)+' ฿')}
+    ${kpi('เงินพักใน escrow', money(s.escrow_held)+' ฿', s.escrow_held>0?'warn':'')}
+    ${kpi('รอโอนให้ช่าง', money(s.payout_pending)+' ฿', s.payout_pending>0?'warn':'')}
+    ${kpi('ช่างรออนุมัติ', num(s.providers_pending), s.providers_pending>0?'warn':'')}
+    ${kpi('ช่างพร้อมรับงาน', num(s.providers_active))}
+    ${kpi('คะแนนเฉลี่ยช่าง', s.avg_rating>0?('★ '+s.avg_rating):'-')}
+    ${kpi('ตอบสนองงานฉุกเฉิน', emer!=null?(emer+' นาที'):'ยังไม่มีข้อมูล',
+          emer!=null&&emer>30?'warn':'')}
+    ${kpi('งานรอช่างรับ', num(s.jobs_new))}
+    ${kpi('ข้อพิพาทที่เปิดอยู่', num(s.disputes_open), s.disputes_open>0?'warn':'')}`;
+  badge('bPending', s.providers_pending);
+  badge('bDispute', s.disputes_open);
+  document.getElementById('byCat').innerHTML = table(
+    ['หมวดงาน','จำนวนงาน'],
+    s.by_category.map(c=>[`${c.icon||''} ${esc(c.category)}`, num(c.jobs)]));
+  document.getElementById('byTambon').innerHTML = s.by_tambon.length ? table(
+    ['ตำบล','งานทั้งหมด','สำเร็จแล้ว'],
+    s.by_tambon.map(t=>['ต.'+esc(t.tambon), num(t.jobs), num(t.done)]))
+    : '<div class="muted">ยังไม่มีงานในระบบ</div>';
+}
+function kpi(lb,v,cls=''){return `<div class="kpi ${cls}"><div class="lb">${lb}</div><div class="v">${v}</div></div>`}
+function badge(id,n){const e=document.getElementById(id);e.style.display=n>0?'inline-block':'none';e.textContent=n}
+function table(heads,rows){
+  return `<div style="overflow-x:auto"><table><thead><tr>${heads.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+function dl(type){
+  fetch('/api/admin/export?type='+type,{headers:{'X-Admin-Token':TOKEN}})
+    .then(r=>r.blob()).then(b=>{
+      const a=document.createElement('a');a.href=URL.createObjectURL(b);
+      a.download=type+'.csv';a.click();});
+}
+
+/* ── 1. อนุมัติช่าง ── */
+async function loadApprove(){
+  const st = document.getElementById('fApprove').value;
+  const rows = await api('/providers?status='+st);
+  document.getElementById('approveList').innerHTML = rows.length ? table(
+    ['วันที่สมัคร','ชื่อ-เบอร์','พื้นที่','หมวดที่ขอ','เอกสาร',''],
+    rows.map(p=>[
+      dt(p.created_at),
+      `<b>${esc(p.display_name)}</b><br><span class="muted">${esc(p.phone||'ไม่ระบุเบอร์')}</span>`,
+      (p.tambon_names||[]).map(t=>`<span class="chip gray">ต.${esc(t)}</span>`).join('')||'-',
+      (p.category_names||[]).map(c=>`<span class="chip">${esc(c)}</span>`).join('')||'-',
+      docChip(p),
+      `<button class="btn sm" onclick='openDrawer(${JSON.stringify(p.id)})'>ตรวจเอกสาร</button>`,
+    ])) : '<div class="muted">ไม่มีรายการในสถานะนี้</div>';
+  window._provs = rows;
+}
+function docChip(p){
+  const has = [p.id_card_url&&'บัตร ปชช.', p.selfie_url&&'เซลฟี่', p.license_url&&'ใบขับขี่'].filter(Boolean);
+  return has.length ? has.map(h=>`<span class="chip">${h}</span>`).join('')
+                    : '<span class="chip danger">ยังไม่มีเอกสาร</span>';
+}
+
+function openDrawer(id){
+  const p = (window._provs||[]).concat(window._dirs||[]).find(x=>x.id===id);
+  if(!p) return;
+  CURRENT = p;
+  const catChips = META.categories.map(c=>{
+    const on = (p.category_names||[]).includes(c.name_th);
+    return `<span class="chip pick ${on?'sel':''}" data-slug="${c.slug}"
+             onclick="this.classList.toggle('sel')">${esc(c.name_th)}</span>`}).join('');
+  document.getElementById('drawerBody').innerHTML = `
+    <button class="close" onclick="closeDrawer()">×</button>
+    <h2>${esc(p.display_name)}</h2>
+    <div class="muted">${esc(p.phone||'ไม่ระบุเบอร์')} ·
+      <span class="chip ${p.approval_status==='approved'?'':'warn'}">${APPROVAL_TH[p.approval_status]||p.approval_status}</span></div>
+    <div class="row">
+      ${p.phone?`<a class="btn sm ghost" href="tel:${esc(p.phone)}">📞 โทรหาช่าง</a>`:''}
+      <span class="muted" style="align-self:center">สมัครเมื่อ ${dt(p.created_at)}</span>
+    </div>
+
+    <label class="f">เอกสารยืนยันตัวตน (คลิกรูปเพื่อขยาย)</label>
+    <div class="thumbs">${docImgs(p)}</div>
+
+    <label class="f">พื้นที่รับงาน</label>
+    <div>${(p.tambon_names||[]).map(t=>`<span class="chip gray">ต.${esc(t)}</span>`).join('')||'<span class="muted">-</span>'}</div>
+
+    <label class="f">อนุมัติให้รับงานหมวด (คลิกเลือก/ยกเลิก)</label>
+    <div id="dCats">${catChips}</div>
+
+    <label class="f">ระดับช่าง</label>
+    <select id="dTier">
+      <option value="1">Level 1 · Newbie (รับงานทีละ 1 งาน)</option>
+      <option value="2">Level 2 · Verified</option>
+      <option value="3">Level 3 · Master (สแตนด์บายฉุกเฉิน 24 ชม.)</option>
+    </select>
+
+    <label class="f">แท็กความถนัด (คั่นด้วยจุลภาค)</label>
+    <input type="text" id="dTags" style="width:100%"
+           placeholder="เช่น ล้างแอร์ติดผนัง, เติมน้ำยา, ปะยาง" value="${esc((p.skill_tags||[]).join(', '))}">
+
+    <label class="f">บันทึกแอดมิน / เหตุผล</label>
+    <textarea id="dNote" placeholder="ระบุเหตุผลเมื่อขอเอกสารเพิ่มหรือปฏิเสธ">${esc(p.admin_note||'')}</textarea>
+
+    <div class="row" style="margin-top:16px">
+      <button class="btn" onclick="doApprove()">🟢 อนุมัติ</button>
+      <button class="btn warn" onclick="doAction('request-info')">🟠 ขอเอกสารเพิ่ม</button>
+      <button class="btn danger" onclick="doAction('reject')">🔴 ปฏิเสธ</button>
+    </div>
+    <div class="muted" style="margin-top:10px">ระบบจะแจ้งผลให้ช่างทาง LINE อัตโนมัติ</div>`;
+  document.getElementById('dTier').value = p.tier || 1;
+  document.getElementById('drawer').classList.add('on');
+}
+function docImgs(p){
+  const items = [[p.id_card_url,'บัตรประชาชน'],[p.selfie_url,'เซลฟี่คู่บัตร'],[p.license_url,'ใบขับขี่/ทะเบียนรถ']];
+  const out = items.filter(([u])=>u).map(([u,lb])=>
+    `<div style="display:inline-block;text-align:center">
+       <img src="${esc(u)}" onclick="this.classList.toggle('zoom')" alt="${lb}">
+       <div class="muted" style="font-size:12px">${lb}</div></div>`).join('');
+  return out || '<span class="chip danger">ช่างยังไม่ได้อัปโหลดเอกสาร — ควรกด "ขอเอกสารเพิ่ม"</span>';
+}
+function closeDrawer(){document.getElementById('drawer').classList.remove('on')}
+
+async function doApprove(){
+  const slugs = [...document.querySelectorAll('#dCats .chip.sel')].map(c=>c.dataset.slug);
+  if(!slugs.length) return alert('เลือกหมวดที่อนุญาตให้รับงานอย่างน้อย 1 หมวด');
+  const tier = +document.getElementById('dTier').value;
+  const tags = document.getElementById('dTags').value.split(',').map(s=>s.trim()).filter(Boolean);
+  await api(`/providers/${CURRENT.id}/approve`,{method:'POST',body:{
+    category_slugs:slugs, tier, skill_tags:tags, verified:tier>=2,
+    admin_note:document.getElementById('dNote').value.trim()||null}});
+  closeDrawer(); alert('อนุมัติแล้ว แจ้งช่างทาง LINE เรียบร้อย'); loadApprove(); loadOverview();
+}
+async function doAction(kind){
+  const reason = document.getElementById('dNote').value.trim();
+  if(!reason) return alert('ระบุเหตุผลในช่องบันทึกแอดมินก่อนครับ');
+  await api(`/providers/${CURRENT.id}/${kind}`,{method:'POST',body:{reason}});
+  closeDrawer(); alert('บันทึกแล้ว แจ้งช่างทาง LINE เรียบร้อย'); loadApprove(); loadOverview();
+}
+
+/* ── 2. ทะเบียนช่าง ── */
+async function loadDirectory(){
+  const qs = new URLSearchParams({status:document.getElementById('fStatus').value});
+  const c = document.getElementById('fCat').value, t = document.getElementById('fTambon').value,
+        q = document.getElementById('fQ').value.trim();
+  if(c) qs.set('category',c); if(t) qs.set('tambon_id',t); if(q) qs.set('q',q);
+  const rows = await api('/providers?'+qs);
+  window._dirs = rows;
+  document.getElementById('dirList').innerHTML = rows.length ? table(
+    ['ชื่อ','ระดับ','หมวด','ตำบล','ผลงาน','คะแนน','สถานะ','จัดการ'],
+    rows.map(p=>[
+      `<b>${esc(p.display_name)}</b><br><span class="muted">${esc(p.phone||'-')}</span>`,
+      `<span class="chip ${p.tier>=3?'warn':''}">${TIER_TH[p.tier]||p.tier}</span>`,
+      (p.category_names||[]).map(x=>`<span class="chip">${esc(x)}</span>`).join(''),
+      (p.tambon_names||[]).map(x=>`<span class="chip gray">${esc(x)}</span>`).join(''),
+      num(p.jobs_done)+' งาน',
+      p.rating_count>0?`★ ${(+p.rating_avg).toFixed(2)} <span class="muted">(${p.rating_count})</span>`:'-',
+      p.active?'<span class="chip">รับงานได้</span>':'<span class="chip danger">ระงับอยู่</span>',
+      `<button class="btn sm ghost" onclick='openDrawer(${JSON.stringify(p.id)})'>แก้ไข</button>
+       <button class="btn sm ${p.active?'danger':''}" onclick="suspend('${p.id}',${!p.active})">
+         ${p.active?'ระงับ':'เปิดรับงาน'}</button>`,
+    ])) : '<div class="muted">ไม่พบช่างตามเงื่อนไข</div>';
+}
+async function suspend(id,active){
+  const reason = active?null:prompt('เหตุผลที่ระงับการรับงาน (แจ้งช่างทาง LINE)');
+  if(!active && reason===null) return;
+  await api(`/providers/${id}/suspend`,{method:'POST',body:{active,reason}});
+  loadDirectory(); loadOverview();
+}
+
+/* ── 3. กระดานงาน ── */
+function jobTab(t){
+  JOBTAB = t;
+  document.querySelectorAll('.tab[data-jt]').forEach(b=>b.classList.toggle('on',b.dataset.jt===t));
+  loadJobs();
+}
+async function loadJobs(){
+  const rows = await api('/jobs?tab='+JOBTAB);
+  const box = document.getElementById('jobList');
+  if(!rows.length){ box.innerHTML='<div class="muted">ไม่มีงานในแท็บนี้</div>'; return; }
+  if(JOBTAB==='new'){
+    box.innerHTML = table(['เวลาแจ้ง','งาน','ตำบล','สื่อประกอบ','ข้อเสนอ','รอมาแล้ว','จัดการ'],
+      rows.map(j=>[
+        dt(j.created_at),
+        `${j.icon||''} <b>${esc(j.title)}</b><br><span class="muted">${esc(j.description||'')}</span>`,
+        'ต.'+esc(j.tambon), media(j), num(j.bids_count)+' ราย',
+        j.age_min>15?`<span class="late">${Math.round(j.age_min)} นาที ⚠️</span>`:`${Math.round(j.age_min)} นาที`,
+        `<button class="btn sm danger" onclick="hold('${j.id}')">แจ้งปัญหา/อายัด</button>`]));
+  }else if(JOBTAB==='active'){
+    box.innerHTML = table(['งาน','ลูกค้า ↔ ช่าง','ราคา','Escrow','OTP','จัดการ'],
+      rows.map(j=>[
+        `${j.icon||''} <b>${esc(j.title)}</b><br><span class="muted">ต.${esc(j.tambon)} · ${STATUS_TH[j.status]}</span>`,
+        `${esc(j.customer_name)}<br><span class="muted">↔ ${esc(j.provider_name||'-')} ${j.provider_phone?esc(j.provider_phone):''}</span>`,
+        money(j.price)+' ฿',
+        j.payment_status==='paid'?'<span class="chip">🔒 ล็อกไว้ 100%</span>':'<span class="chip warn">รอชำระ</span>',
+        j.otp_verified_at?'<span class="chip">✓ เช็คอินแล้ว</span>':`<span class="chip gray">รหัส ${esc(j.start_otp||'-')}</span>`,
+        `<button class="btn sm danger" onclick="hold('${j.id}')">อายัดเงิน</button>`]));
+  }else if(JOBTAB==='done'){
+    box.innerHTML = table(['งาน','ช่าง','ยอดรวม','ช่างได้รับ','ค่าระบบ','กองทุน','ภาษี 1%','รีวิว'],
+      rows.map(j=>[
+        `${j.icon||''} <b>${esc(j.title)}</b><br><span class="muted">ต.${esc(j.tambon)} · ${dt(j.created_at)}</span>`,
+        esc(j.provider_name||'-'), money(j.price)+' ฿', money(j.provider_net)+' ฿',
+        money(j.platform_fee)+' ฿', money(j.fund_amount)+' ฿', money(j.tax_withheld)+' ฿',
+        j.rating?`★ ${j.rating}<br><span class="muted">${esc(j.comment||'')}</span>`:'<span class="muted">ยังไม่รีวิว</span>']));
+  }else{
+    box.innerHTML = table(['งาน','สถานะ','ลูกค้า ↔ ช่าง','ยอดเงิน','จัดการ'],
+      rows.map(j=>[
+        `${j.icon||''} <b>${esc(j.title)}</b><br><span class="muted">ต.${esc(j.tambon)}</span>`,
+        `<span class="chip danger">${STATUS_TH[j.status]||j.status}</span>`,
+        `${esc(j.customer_name)} ↔ ${esc(j.provider_name||'-')}`,
+        money(j.payment_amount)+' ฿',
+        j.dispute_id?'<span class="chip warn">มีเคสเปิดอยู่ → ดูแท็บข้อพิพาท</span>':
+          `<button class="btn sm danger" onclick="hold('${j.id}')">เปิดเคส</button>`]));
+  }
+}
+function media(j){
+  const out = [];
+  if(j.photos&&j.photos.length) out.push(`<span class="chip">🖼️ ${j.photos.length} รูป</span>`);
+  if(j.voice_note_url) out.push(`<audio controls style="height:32px;max-width:170px" src="${esc(j.voice_note_url)}"></audio>`);
+  return out.join(' ')||'<span class="muted">-</span>';
+}
+async function hold(jobId){
+  const reason = prompt('เหตุผลที่อายัดเงิน/เปิดเคสข้อพิพาท');
+  if(!reason) return;
+  await api(`/jobs/${jobId}/hold`,{method:'POST',body:{reason}});
+  alert('อายัดเงินและเปิดเคสแล้ว'); loadJobs(); loadOverview();
+}
+
+/* ── 4. การเงิน ── */
+async function loadFinance(){
+  const [s,f] = await Promise.all([api('/summary'), api('/finance')]);
+  document.getElementById('finKpis').innerHTML = `
+    ${kpi('เงินพักใน escrow', money(s.escrow_held)+' ฿','hl')}
+    ${kpi('รอโอนให้ช่าง', money(s.payout_pending)+' ฿', s.payout_pending>0?'warn':'')}
+    ${kpi('รายได้แพลตฟอร์ม 8%', money(s.platform_fee)+' ฿')}
+    ${kpi('กองทุนชุมชน 2%', money(s.fund_total)+' ฿')}
+    ${kpi('ภาษีหัก ณ ที่จ่าย 1%', money(s.tax_withheld)+' ฿')}`;
+  document.getElementById('escrowList').innerHTML = f.escrow.length ? table(
+    ['งาน','ตำบล','ยอดล็อก','สถานะงาน','จ่ายเมื่อ'],
+    f.escrow.map(e=>[esc(e.title),'ต.'+esc(e.tambon),money(e.amount)+' ฿',
+      STATUS_TH[e.job_status]||e.job_status, dt(e.paid_at)]))
+    : '<div class="muted">ไม่มีเงินค้างใน escrow</div>';
+  document.getElementById('payoutList').innerHTML = f.payouts.length ? table(
+    ['วันที่','งาน','ช่าง','พร้อมเพย์','ยอดงาน','ช่างได้รับ','สถานะ',''],
+    f.payouts.map(p=>[dt(p.created_at),esc(p.title),esc(p.provider_name||'-'),
+      p.promptpay_id ? esc(p.promptpay_id) : '<span class="chip danger">ยังไม่ผูกพร้อมเพย์</span>',
+      money(p.gross)+' ฿', `<b>${money(p.provider_net)} ฿</b>`,
+      p.status==='transferred'?'<span class="chip">โอนแล้ว</span>':'<span class="chip warn">รอโอน</span>',
+      p.status==='transferred'?'':`<button class="btn sm" onclick="markPaid('${p.id}')">ยืนยันโอนแล้ว</button>`]))
+    : '<div class="muted">ยังไม่มีรายการแบ่งรายได้</div>';
+  document.getElementById('fundList').innerHTML = f.fund.length ? table(
+    ['วันที่','ตำบล','จำนวน','หมายเหตุ'],
+    f.fund.map(x=>[dt(x.created_at),'ต.'+esc(x.tambon),
+      (x.amount<0?'<span style="color:var(--danger)">':'<span>')+money(x.amount)+' ฿</span>',
+      esc(x.note||'')]))
+    : '<div class="muted">ยังไม่มีเงินเข้ากองทุน</div>';
+}
+async function markPaid(id){
+  if(!confirm('ยืนยันว่าโอนเงินเข้าบัญชีช่างเรียบร้อยแล้ว?')) return;
+  await api(`/settlements/${id}/mark-transferred`,{method:'POST'});
+  loadFinance(); loadOverview();
+}
+
+/* ── 5. ข้อพิพาท ── */
+async function loadDisputes(){
+  const rows = await api('/disputes?status='+document.getElementById('fDispute').value);
+  document.getElementById('disputeList').innerHTML = rows.length ? table(
+    ['เปิดเมื่อ','งาน','คู่กรณี','ยอดเงิน','หลักฐาน','เหตุผล','ตัดสิน'],
+    rows.map(d=>[
+      dt(d.created_at),
+      `<b>${esc(d.title)}</b><br><span class="muted">ต.${esc(d.tambon)}</span>`,
+      `${esc(d.customer_name)}<br><span class="muted">↔ ${esc(d.provider_name||'-')}</span>`,
+      money(d.amount)+' ฿',
+      `${d.photos&&d.photos.length?`<span class="chip">🖼️ ${d.photos.length} รูป</span>`:''}
+       ${d.voice_note_url?`<audio controls style="height:30px;max-width:150px" src="${esc(d.voice_note_url)}"></audio>`:''}
+       ${d.otp_verified_at?'<span class="chip">✓ เช็คอิน '+dt(d.otp_verified_at)+'</span>':'<span class="chip danger">ไม่มีเช็คอิน</span>'}`,
+      esc(d.reason||''),
+      d.status==='resolved'
+        ? `<span class="chip">ปิดเคสแล้ว: ${esc(d.resolution||'')}</span>`
+        : `<button class="btn sm" onclick="resolve('${d.id}','release')">ปล่อยเงินให้ช่าง</button>
+           <button class="btn sm warn" onclick="resolve('${d.id}','refund')">คืนเงินลูกค้า</button>
+           <button class="btn sm navy" onclick="resolve('${d.id}','fund_compensate')">ชดเชยจากกองทุน</button>`,
+    ])) : '<div class="muted">ไม่มีเคสในสถานะนี้</div>';
+}
+async function resolve(id,action){
+  const label = {release:'ปล่อยเงินให้ช่าง',refund:'คืนเงินให้ลูกค้า',fund_compensate:'ชดเชยจากกองทุนชุมชน'}[action];
+  if(!confirm(`ยืนยันการตัดสิน: ${label}?`)) return;
+  const note = prompt('บันทึกเหตุผลการตัดสิน (ไม่บังคับ)')||null;
+  await api(`/disputes/${id}/resolve`,{method:'POST',body:{action,note}});
+  alert('ปิดเคสแล้ว'); loadDisputes(); loadOverview();
+}
+
+if(TOKEN) api('/summary').then(start).catch(()=>{document.getElementById('login').style.display='block'});
+else document.getElementById('login').style.display='block';
+</script>
+</body>
+</html>

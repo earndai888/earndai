@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import ai_chat, db
 from .config import settings
-from .routers import jobs, webhook
+from .routers import admin, jobs, webhook
 from .routers.jobs import create_settlement
 
 logging.basicConfig(level=logging.INFO)
@@ -54,6 +54,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="เอิ้นได้ API", version="0.1.0", lifespan=lifespan)
 app.include_router(webhook.router)
 app.include_router(jobs.router)
+app.include_router(admin.router)
 
 
 @app.get("/healthz")
@@ -80,3 +81,9 @@ async def index():
 async def provider_page():
     """หน้าช่าง"""
     return FileResponse(STATIC_DIR / "provider.html")
+
+
+@app.get("/admin", include_in_schema=False)
+async def admin_page():
+    """หน้าแอดมิน (ต้องมี ADMIN_TOKEN)"""
+    return FileResponse(STATIC_DIR / "admin.html")

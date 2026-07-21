@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     promptpay_id: str = "0899999999"
     # อำเภอนำร่อง — meta จะแสดงเฉพาะตำบลในอำเภอนี้ (เว้นว่าง = ทุกตำบล)
     pilot_amphoe: str = "กันทรลักษ์"
+    # รหัสเข้าหน้าแอดมิน — เว้นว่าง = ปิดหน้าแอดมินทั้งหมด (ต้องตั้งค่าเองก่อนใช้)
+    admin_token: str = ""
     # AI ชั้นที่ 2 — คุยโต้ตอบผ่าน Gemini ก่อนส่งลิงก์ฟอร์ม
     # (เว้นว่าง = ปิด ใช้ keyword matching อย่างเดียว) — คีย์ฟรีจาก aistudio.google.com/apikey
     gemini_api_key: str = ""

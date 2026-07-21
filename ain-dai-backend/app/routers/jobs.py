@@ -88,13 +88,20 @@ async def me(user: dict = Depends(current_user)):
         "line_user_id": user["line_user_id"],
         "display_name": user["display_name"],
         "phone": user["phone"],
-        "is_provider": bool(prov and prov["active"]),
+        # ทำงานได้ต่อเมื่อแอดมินอนุมัติแล้วและไม่ถูกระงับ
+        "is_provider": bool(prov and prov["active"] and prov["approval_status"] == "approved"),
+        "has_applied": bool(prov),
+        "approval_status": prov["approval_status"] if prov else None,
+        "admin_note": prov["admin_note"] if prov else None,
         "provider": {
             "bio": prov["bio"], "promptpay_id": prov["promptpay_id"],
             "category_slugs": prov["category_slugs"] or [],
             "tambon_coverage": prov["tambon_coverage"],
             "rating_avg": prov["rating_avg"], "rating_count": prov["rating_count"],
             "jobs_done": prov["jobs_done"], "verified": prov["verified"],
+            "tier": prov["tier"], "skill_tags": prov["skill_tags"],
+            "id_card_url": prov["id_card_url"], "selfie_url": prov["selfie_url"],
+            "license_url": prov["license_url"], "active": prov["active"],
         } if prov else None,
     }
 
@@ -108,6 +115,10 @@ class ProviderRegisterIn(BaseModel):
     promptpay_id: str | None = Field(default=None, max_length=20)
     category_slugs: list[str] = Field(min_length=1)
     tambon_ids: list[int] = Field(min_length=1)
+    # เอกสารยืนยันตัวตน (อัปโหลดผ่าน /api/uploads แล้วส่ง url มา)
+    id_card_url: str | None = None
+    selfie_url: str | None = None
+    license_url: str | None = None
 
 
 @router.post("/provider/register", status_code=201)
@@ -123,18 +134,25 @@ async def provider_register(body: ProviderRegisterIn, user: dict = Depends(curre
         "SELECT count(*) FROM tambons WHERE id = ANY($1::int[])", tambon_ids)
     if tam_count != len(tambon_ids):
         raise HTTPException(400, "มีตำบลที่ไม่รู้จัก")
-    await pool.execute(
-        """INSERT INTO providers (user_id, categories, tambon_coverage, bio, promptpay_id)
-           VALUES ($1, $2, $3, $4, $5)
+    # สมัครใหม่/แก้ไข → กลับเข้าคิวรออนุมัติ ยกเว้นช่างที่อนุมัติแล้ว (แก้โปรไฟล์ได้เลย)
+    row = await pool.fetchrow(
+        """INSERT INTO providers (user_id, categories, tambon_coverage, bio, promptpay_id,
+                                  id_card_url, selfie_url, license_url, approval_status, active)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending',false)
            ON CONFLICT (user_id) DO UPDATE
-             SET categories = $2, tambon_coverage = $3, bio = $4,
-                 promptpay_id = $5, active = true""",
+             SET categories = $2, tambon_coverage = $3, bio = $4, promptpay_id = $5,
+                 id_card_url = COALESCE($6, providers.id_card_url),
+                 selfie_url  = COALESCE($7, providers.selfie_url),
+                 license_url = COALESCE($8, providers.license_url),
+                 approval_status = CASE WHEN providers.approval_status = 'approved'
+                                        THEN 'approved' ELSE 'pending' END
+           RETURNING approval_status""",
         user["id"], [r["id"] for r in cat_rows], tambon_ids,
-        body.bio, body.promptpay_id)
+        body.bio, body.promptpay_id, body.id_card_url, body.selfie_url, body.license_url)
     await pool.execute(
         "UPDATE users SET display_name = $2, phone = $3, role = 'provider' WHERE id = $1",
         user["id"], body.display_name, body.phone)
-    return {"ok": True}
+    return {"ok": True, "approval_status": row["approval_status"]}
 
 
 @router.get("/providers/top")
@@ -145,7 +163,7 @@ async def top_providers():
              FROM providers p
              JOIN users u ON u.id = p.user_id
              LEFT JOIN tambons t ON t.id = u.tambon_id
-            WHERE p.active
+            WHERE p.active AND p.approval_status = 'approved'
             ORDER BY p.rating_avg DESC, p.jobs_done DESC LIMIT 5""")
     return [dict(r) for r in rows]
 
@@ -215,7 +233,7 @@ async def broadcast_job(job: dict, category_name: str) -> None:
     providers = await pool.fetch(
         """SELECT DISTINCT u.line_user_id
              FROM providers p JOIN users u ON u.id = p.user_id
-            WHERE p.active
+            WHERE p.active AND p.approval_status = 'approved'
               AND $1 = ANY(p.categories)
               AND $2 = ANY(p.tambon_coverage)
               AND u.id <> $3
@@ -258,7 +276,8 @@ class BidIn(BaseModel):
 @router.post("/jobs/{job_id}/bids", status_code=201)
 async def create_bid(job_id: str, body: BidIn, user: dict = Depends(current_user)):
     pool = db.get_pool()
-    provider = await pool.fetchrow("SELECT * FROM providers WHERE user_id = $1 AND active", user["id"])
+    provider = await pool.fetchrow("SELECT * FROM providers WHERE user_id = $1 AND active AND approval_status = 'approved'",
+        user["id"])
     if not provider:
         raise HTTPException(403, "ต้องลงทะเบียนเป็นช่างก่อนจึงเสนอราคาได้")
     job = await pool.fetchrow("SELECT * FROM jobs WHERE id = $1::uuid", job_id)
@@ -315,7 +334,8 @@ async def provider_jobs(user: dict = Depends(current_user)):
     """ฝั่งช่าง: งานเปิดรับข้อเสนอในพื้นที่+หมวดของตน และงานที่ตนถูกเลือก"""
     pool = db.get_pool()
     prov = await pool.fetchrow(
-        "SELECT * FROM providers WHERE user_id = $1 AND active", user["id"])
+        "SELECT * FROM providers WHERE user_id = $1 AND active AND approval_status = 'approved'",
+        user["id"])
     if not prov:
         raise HTTPException(403, "ต้องลงทะเบียนเป็นช่างก่อน")
     open_jobs = await pool.fetch(

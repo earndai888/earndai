@@ -33,8 +33,18 @@
   <textarea class="ta" id="rbio" maxlength="300" placeholder="เช่น ประสบการณ์ 10 ปี เครื่องมือครบ เก็บงานเรียบร้อย"></textarea>
   <label class="f">เบอร์ PromptPay รับเงินค่าจ้าง</label>
   <input class="inp" id="rpromptpay" placeholder="เบอร์มือถือหรือเลขบัตรประชาชน" maxlength="20">
-  <button class="btn" id="regbtn" onclick="register()">บันทึกข้อมูลช่าง</button>
-  <div class="note">ระบบจะแบ่งรายได้ให้ช่าง 89% ของราคางาน (หักค่าระบบ 8% กองทุนชุมชน 2% ภาษี 1%)</div>
+
+  <label class="f">เอกสารยืนยันตัวตน (แอดมินตรวจก่อนอนุมัติ)</label>
+  <div class="photo" onclick="document.getElementById('idcard').click()" id="idcardbox">🪪 รูปบัตรประชาชน</div>
+  <input type="file" id="idcard" accept="image/*" style="display:none" onchange="upDoc('id_card_url','idcardbox',this.files[0])">
+  <div class="photo" onclick="document.getElementById('selfie').click()" id="selfiebox">🤳 รูปถ่ายคู่กับบัตรประชาชน</div>
+  <input type="file" id="selfie" accept="image/*" style="display:none" onchange="upDoc('selfie_url','selfiebox',this.files[0])">
+  <div class="photo" onclick="document.getElementById('license').click()" id="licensebox">🚗 ใบขับขี่/ทะเบียนรถ (เฉพาะงานฉุกเฉิน)</div>
+  <input type="file" id="license" accept="image/*" style="display:none" onchange="upDoc('license_url','licensebox',this.files[0])">
+
+  <button class="btn" id="regbtn" onclick="register()">ส่งใบสมัคร</button>
+  <div class="note">แอดมินจะตรวจเอกสารและแจ้งผลทาง LINE ภายใน 1-2 วัน<br>
+    ระบบแบ่งรายได้ให้ช่าง 89% ของราคางาน (หักค่าระบบ 8% กองทุนชุมชน 2% ภาษี 1%)</div>
 </section>
 
 <!-- ═══ หน้าแรกช่าง ═══ -->
@@ -65,7 +75,7 @@
 
 <script src="/static/common.js"></script>
 <script>
-const state = {me:null, jobId:null};
+const state = {me:null, jobId:null, docs:{}};
 let workPhotos = [];
 
 const short = n => ({'ตัดหญ้า-จัดสวน':'ตัดหญ้า','ซ่อมเครื่องใช้ไฟฟ้า':'ซ่อมไฟฟ้า','ช่างซ่อมทั่วไป':'ช่างซ่อม','บริการอื่นๆ':'อื่นๆ','ล้างแอร์/ซ่อมแอร์':'ล้างแอร์'}[n]||n);
@@ -92,12 +102,62 @@ const short = n => ({'ตัดหญ้า-จัดสวน':'ตัดหญ
   }
 })();
 
+/* อัปโหลดเอกสารยืนยันตัวตน */
+async function upDoc(field, boxId, file){
+  if(!file) return;
+  const box = document.getElementById(boxId);
+  const label = box.textContent;
+  box.textContent = 'กำลังอัปโหลด…';
+  try{
+    state.docs[field] = await uploadFile(file);
+    box.innerHTML = '✅ อัปโหลดแล้ว <span style="font-size:12px">(แตะเพื่อเปลี่ยนรูป)</span>';
+    box.style.borderColor = 'var(--green)';
+    box.style.background = 'var(--green-pale)';
+  }catch(e){ box.textContent = label; alert('อัปโหลดไม่สำเร็จ: '+e.message); }
+}
+
+/* แถบสถานะใบสมัคร */
+function applicationBanner(){
+  const me = state.me;
+  if(!me.has_applied) return '';
+  const note = me.admin_note ? `<br><b>หมายเหตุจากแอดมิน:</b> ${esc(me.admin_note)}` : '';
+  if(me.approval_status === 'pending')
+    return `<div class="escrow warn" style="margin:12px 18px">⏳ <span><b>ใบสมัครอยู่ระหว่างตรวจสอบ</b><br>
+            แอดมินกำลังตรวจเอกสาร จะแจ้งผลทาง LINE ครับ${note}</span></div>`;
+  if(me.approval_status === 'info_requested')
+    return `<div class="escrow warn" style="margin:12px 18px">📄 <span><b>แอดมินขอเอกสารเพิ่มเติม</b>${note}<br>
+            อัปโหลดเพิ่มแล้วกดส่งใบสมัครอีกครั้งครับ</span></div>`;
+  if(me.approval_status === 'rejected')
+    return `<div class="escrow" style="margin:12px 18px;background:#FDECEC;color:#D64545">⛔ <span>
+            <b>ใบสมัครไม่ผ่านการอนุมัติ</b>${note}<br>แก้ไขแล้วส่งใหม่ได้ครับ</span></div>`;
+  if(me.provider && !me.provider.active)
+    return `<div class="escrow" style="margin:12px 18px;background:#FDECEC;color:#D64545">⛔ <span>
+            <b>บัญชีช่างถูกระงับการรับงานชั่วคราว</b>${note}</span></div>`;
+  return '';
+}
+
 async function refreshMe(){ state.me = await api('/me'); }
 
 function prefillRegister(){
   const me = state.me, p = me.provider;
   document.getElementById('preghead').textContent =
-    me.is_provider ? 'แก้ไขข้อมูลช่าง' : 'สมัครเป็นช่างกับเอิ้นได้';
+    me.is_provider ? 'แก้ไขข้อมูลช่าง'
+    : me.has_applied ? 'ใบสมัครเป็นช่าง' : 'สมัครเป็นช่างกับเอิ้นได้';
+  // แถบสถานะใบสมัคร (รออนุมัติ / ขอเอกสารเพิ่ม / ถูกปฏิเสธ / ถูกระงับ)
+  const old = document.getElementById('appbanner');
+  if(old) old.remove();
+  const html = applicationBanner();
+  if(html){
+    const div = document.createElement('div');
+    div.id = 'appbanner'; div.innerHTML = html;
+    const sec = document.getElementById('preg');
+    sec.insertBefore(div, sec.querySelector('label.f'));
+  }
+  if(p){
+    if(p.id_card_url) markDoc('idcardbox');
+    if(p.selfie_url)  markDoc('selfiebox');
+    if(p.license_url) markDoc('licensebox');
+  }
   document.getElementById('rname').value = me.display_name === 'ผู้ใช้ใหม่' ? '' : me.display_name;
   document.getElementById('rphone').value = me.phone || '';
   document.getElementById('rbio').value = p ? (p.bio || '') : '';
@@ -106,6 +166,14 @@ function prefillRegister(){
   document.querySelectorAll('#rcats .chip').forEach(c=>c.classList.toggle('on', cats.includes(c.dataset.slug)));
   const tams = p ? p.tambon_coverage : [];
   document.querySelectorAll('#rtambons .chip').forEach(c=>c.classList.toggle('on', tams.includes(+c.dataset.id)));
+}
+
+function markDoc(boxId){
+  const box = document.getElementById(boxId);
+  if(!box) return;
+  box.innerHTML = '✅ มีเอกสารแล้ว <span style="font-size:12px">(แตะเพื่อเปลี่ยนรูป)</span>';
+  box.style.borderColor = 'var(--green)';
+  box.style.background = 'var(--green-pale)';
 }
 
 function editProfile(){ prefillRegister(); go('preg'); }
@@ -118,7 +186,8 @@ async function register(){
   if(!cats.length) return alert('เลือกหมวดงานที่รับอย่างน้อย 1 หมวดครับ');
   if(!tams.length) return alert('เลือกตำบลที่รับงานอย่างน้อย 1 ตำบลครับ');
   const btn = document.getElementById('regbtn');
-  btn.disabled = true; btn.textContent = 'กำลังบันทึก…';
+  const wasProvider = state.me.is_provider;
+  btn.disabled = true; btn.textContent = 'กำลังส่ง…';
   try{
     await api('/provider/register', {method:'POST', body:{
       display_name: name,
@@ -126,13 +195,20 @@ async function register(){
       bio: document.getElementById('rbio').value.trim() || null,
       promptpay_id: document.getElementById('rpromptpay').value.trim() || null,
       category_slugs: cats, tambon_ids: tams,
+      ...state.docs,
     }});
     await refreshMe();
-    document.getElementById('pnav').style.display='flex';
-    if(state.pendingJob){ const j = state.pendingJob; state.pendingJob = null; openJob(j); }
-    else loadHome();
-  }catch(e){ alert('บันทึกไม่สำเร็จ: '+e.message); }
-  finally{ btn.disabled=false; btn.textContent='บันทึกข้อมูลช่าง'; }
+    if(state.me.is_provider){
+      document.getElementById('pnav').style.display='flex';
+      if(state.pendingJob){ const j = state.pendingJob; state.pendingJob = null; openJob(j); }
+      else loadHome();
+    }else{
+      prefillRegister();   // ยังไม่อนุมัติ → โชว์แถบสถานะรอตรวจ
+      if(!wasProvider) alert('ส่งใบสมัครแล้วครับ 🙏 แอดมินจะตรวจเอกสารและแจ้งผลทาง LINE');
+      window.scrollTo(0,0);
+    }
+  }catch(e){ alert('ส่งใบสมัครไม่สำเร็จ: '+e.message); }
+  finally{ btn.disabled=false; btn.textContent = wasProvider?'บันทึกข้อมูลช่าง':'ส่งใบสมัคร'; }
 }
 
 /* ── หน้าแรกช่าง ── */
