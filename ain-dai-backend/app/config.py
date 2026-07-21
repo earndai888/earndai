@@ -23,8 +23,8 @@ class Settings(BaseSettings):
     # AI ชั้นที่ 2 — คุยโต้ตอบผ่าน Gemini ก่อนส่งลิงก์ฟอร์ม
     # (เว้นว่าง = ปิด ใช้ keyword matching อย่างเดียว) — คีย์ฟรีจาก aistudio.google.com/apikey
     gemini_api_key: str = ""
-    # alias ชี้รุ่น flash ล่าสุดเสมอ — กันโมเดลเก่าโดนปลดจนบอทพัง
-    gemini_model: str = "gemini-flash-latest"
+    # flash-lite = เร็วสุด เหมาะกับแชท (ปิด thinking ในโค้ดเพื่อความไว)
+    gemini_model: str = "gemini-flash-lite-latest"
     # โหมดพัฒนา: อนุญาต header X-Debug-User แทนการ verify LIFF token
     # (production ต้องเป็น false — เปิดเฉพาะตอนพัฒนาในเครื่อง)
     dev_mode: bool = False

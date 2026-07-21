@@ -78,11 +78,16 @@ const short = n => ({'ตัดหญ้า-จัดสวน':'ตัดหญ
   document.getElementById('rtambons').innerHTML = META.tambons.map(t=>
     `<button class="chip" data-id="${t.id}" onclick="this.classList.toggle('on')">ต.${esc(t.name)}</button>`).join('');
   await refreshMe();
+  const jobParam = new URLSearchParams(location.search).get('job');
   if(state.me.is_provider){
     document.getElementById('pnav').style.display='flex';
-    loadHome();
+    if(jobParam) openJob(jobParam); else loadHome();
   }else{
     prefillRegister();
+    if(jobParam){
+      state.pendingJob = jobParam;
+      document.getElementById('preghead').textContent = 'สมัครเป็นช่างเพื่อเสนอราคางานนี้';
+    }
     go('preg');
   }
 })();
@@ -124,7 +129,8 @@ async function register(){
     }});
     await refreshMe();
     document.getElementById('pnav').style.display='flex';
-    loadHome();
+    if(state.pendingJob){ const j = state.pendingJob; state.pendingJob = null; openJob(j); }
+    else loadHome();
   }catch(e){ alert('บันทึกไม่สำเร็จ: '+e.message); }
   finally{ btn.disabled=false; btn.textContent='บันทึกข้อมูลช่าง'; }
 }
@@ -184,6 +190,20 @@ async function sendBid(jobId, i, btn){
   }catch(e){ alert('เสนอราคาไม่สำเร็จ: '+e.message); btn.disabled=false; }
 }
 
+/* เสนอราคาจากหน้ารายละเอียดงาน (เข้ามาจากการ์ดในกลุ่ม/แจ้งเตือน) */
+async function bidFromJob(btn){
+  const price = parseFloat(document.getElementById('jbp').value);
+  if(!price || price<=0) return alert('ใส่ราคาก่อนครับ');
+  btn.disabled = true;
+  try{
+    await api(`/jobs/${state.jobId}/bids`, {method:'POST', body:{
+      price, message: document.getElementById('jbm').value.trim()||null,
+      available_at: document.getElementById('jba').value.trim()||null}});
+    alert('ส่งข้อเสนอเรียบร้อย! รอลูกค้าเลือกช่างครับ 🙏');
+    loadHome();
+  }catch(e){ alert('เสนอราคาไม่สำเร็จ: '+e.message); btn.disabled=false; }
+}
+
 /* ── งานที่ถูกเลือก ── */
 async function openJob(id){
   state.jobId = id;
@@ -200,7 +220,17 @@ async function openJob(id){
         ${j.voice_note_url?`<audio controls src="${j.voice_note_url}"></audio>`:''}
         ${j.photos&&j.photos.length?`<div class="thumbs" style="margin:8px 0 0">${j.photos.map(p=>`<img src="${p}">`).join('')}</div>`:''}
       </div>`;
-    if(j.status==='assigned'){
+    if(j.status==='bidding' || j.status==='open'){
+      html += `
+        <div class="escrow">💰 <span>งานนี้เปิดรับข้อเสนอ — ใส่ราคาที่คุณรับได้ แล้วส่งให้ลูกค้าเลือก</span></div>
+        <label class="f">ราคาที่เสนอ (บาท)</label>
+        <input class="inp" id="jbp" inputmode="numeric" placeholder="เช่น 350">
+        <label class="f">ข้อความถึงลูกค้า</label>
+        <input class="inp" id="jbm" placeholder="เช่น เครื่องมือพร้อม เก็บกวาดให้">
+        <label class="f">ไปได้เมื่อไหร่</label>
+        <input class="inp" id="jba" placeholder="เช่น เสาร์ 8:00">
+        <button class="btn" onclick="bidFromJob(this)">💵 ส่งข้อเสนอ</button>`;
+    }else if(j.status==='assigned'){
       html += `
         <div class="escrow">🛡️ <span>ลูกค้าจ่ายเงินเข้า escrow แล้ว — ไปหน้างานแล้วขอรหัส 4 หลักจากลูกค้าเพื่อเริ่มงาน</span></div>
         <label class="f">กรอกรหัสเริ่มงานจากลูกค้า</label>
