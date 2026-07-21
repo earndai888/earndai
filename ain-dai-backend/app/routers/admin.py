@@ -493,6 +493,45 @@ async def wht_pdf(settlement_id: str, _: bool = Admin):
         "Content-Disposition": f'inline; filename="wht-{wht_no:05d}.pdf"'})
 
 
+# ══════════ ตั้งค่า / สถานะระบบ ══════════
+
+@router.get("/settings")
+async def get_settings(_: bool = Admin):
+    """ค่าตั้งระบบที่ตั้งผ่าน env — แสดงให้แอดมินตรวจว่าอะไรตั้งครบแล้วบ้าง"""
+    pool = db.get_pool()
+    cats = await pool.fetchval("SELECT count(*) FROM service_categories WHERE active")
+    tams = await pool.fetchval("SELECT count(*) FROM tambons WHERE amphoe = $1",
+                               settings.pilot_amphoe)
+    liff_ok = bool(settings.liff_id) and not settings.liff_id.startswith("0000000000")
+    return {
+        "pilot_amphoe": settings.pilot_amphoe,
+        "categories_active": cats,
+        "tambons": tams,
+        "company_name": settings.company_name,
+        "company_tax_id": settings.company_tax_id,
+        "company_address": settings.company_address,
+        "promptpay_id": settings.promptpay_id,
+        "dev_mode": settings.dev_mode,
+        "checks": [
+            {"key": "LINE_CHANNEL_ACCESS_TOKEN", "label": "บอท LINE ส่งข้อความ/แจ้งเตือน",
+             "ok": settings.line_channel_access_token not in ("", "changeme")},
+            {"key": "LINE_CHANNEL_SECRET", "label": "ตรวจลายเซ็น webhook",
+             "ok": settings.line_channel_secret not in ("", "changeme")},
+            {"key": "LIFF_ID", "label": "เปิดหน้าเว็บในแอป LINE (ล็อกอินจริง)", "ok": liff_ok},
+            {"key": "GEMINI_API_KEY", "label": "AI น้องเอิ้นได้ คุยกับลูกค้า",
+             "ok": bool(settings.gemini_api_key)},
+            {"key": "PROMPTPAY_ID", "label": "QR รับเงิน escrow",
+             "ok": settings.promptpay_id != "0899999999"},
+            {"key": "COMPANY_TAX_ID", "label": "เลขผู้เสียภาษี (ใบ 50 ทวิ)",
+             "ok": bool(settings.company_tax_id)},
+            {"key": "COMPANY_ADDRESS", "label": "ที่อยู่บริษัท (ใบ 50 ทวิ)",
+             "ok": bool(settings.company_address)},
+            {"key": "DEV_MODE=false", "label": "ปิดโหมดทดสอบ (สวมตัวตนไม่ได้)",
+             "ok": not settings.dev_mode},
+        ],
+    }
+
+
 # ══════════ กลุ่ม OpenChat ต่อหมวดงาน ══════════
 
 @router.get("/category-groups")
