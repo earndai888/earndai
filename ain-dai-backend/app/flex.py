@@ -1,4 +1,6 @@
 """สร้างข้อความ LINE: การ์ดงาน (Flex), ปุ่มเปิด LIFF, quick reply เลือกหมวด"""
+from urllib.parse import urlencode
+
 from .config import settings
 from .intent import CATEGORY_NAMES
 
@@ -11,10 +13,38 @@ def liff_url(path: str = "") -> str:
     return f"https://liff.line.me/{settings.liff_id}{path}"
 
 
-def open_form_message(category_slug: str | None) -> dict:
-    """ปุ่มเปิดฟอร์มประกาศงาน (prefill หมวดถ้ารู้แล้ว)"""
+def open_form_message(
+    category_slug: str | None,
+    description: str | None = None,
+    tambon: str | None = None,
+    budget_min: float | None = None,
+    budget_max: float | None = None,
+    preferred_time: str | None = None,
+) -> dict:
+    """ปุ่มเปิดฟอร์มประกาศงาน — เติมข้อมูลที่คุยกับ AI ไว้ให้ล่วงหน้า
+    (ส่งผ่าน query string ให้หน้าเว็บกรอกลงฟอร์มอัตโนมัติ)"""
     name = CATEGORY_NAMES.get(category_slug, "ช่าง") if category_slug else "ช่าง"
-    path = f"?category={category_slug}" if category_slug else ""
+    params: dict[str, str] = {}
+    if category_slug:
+        params["category"] = category_slug
+    if tambon:
+        params["tambon"] = tambon[:40]
+    if description:
+        params["desc"] = description[:300]
+    if budget_min:
+        params["bmin"] = str(int(budget_min))
+    if budget_max:
+        params["bmax"] = str(int(budget_max))
+    if preferred_time:
+        params["when"] = preferred_time[:40]
+    path = f"?{urlencode(params)}" if params else ""
+
+    filled = [t for t in ("รายละเอียดงาน" if description else "",
+                          f"ต.{tambon}" if tambon else "",
+                          "งบประมาณ" if (budget_min or budget_max) else "") if t]
+    sub = ("กรอก" + " • ".join(filled) + " ให้แล้ว กดตรวจดูอีกทีแล้วส่งได้เลยครับ"
+           if filled else
+           "กดปุ่มด้านล่าง กรอกรายละเอียดงานสั้นๆ เดี๋ยวช่างในตำบลของคุณจะเสนอราคามาให้เลือกครับ")
     return {
         "type": "flex",
         "altText": f"เอิ้นหา{name} — กรอกรายละเอียดงานได้เลย",
@@ -23,8 +53,7 @@ def open_form_message(category_slug: str | None) -> dict:
             "body": {"type": "box", "layout": "vertical", "spacing": "sm", "contents": [
                 {"type": "text", "text": f"เอิ้นหา{name}ใช่ไหมครับ?", "weight": "bold",
                  "size": "lg", "color": NAVY, "wrap": True},
-                {"type": "text", "text": "กดปุ่มด้านล่าง กรอกรายละเอียดงานสั้นๆ เดี๋ยวช่างในตำบลของคุณจะเสนอราคามาให้เลือกครับ",
-                 "size": "sm", "color": "#68776C", "wrap": True},
+                {"type": "text", "text": sub, "size": "sm", "color": "#68776C", "wrap": True},
             ]},
             "footer": {"type": "box", "layout": "vertical", "contents": [
                 {"type": "button", "style": "primary", "color": GREEN, "height": "sm",

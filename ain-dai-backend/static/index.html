@@ -41,7 +41,7 @@
   <div class="chips" id="catchips"></div>
   <label class="f">พื้นที่รับบริการ</label>
   <div class="row2">
-    <select class="inp" id="amphoesel"><option>อ.เมืองศรีสะเกษ</option></select>
+    <select class="inp" id="amphoesel"></select>
     <select class="inp" id="tambonsel"></select>
   </div>
   <label class="f">เล่ารายละเอียดงาน</label>
@@ -173,12 +173,59 @@ function clearActive(){ localStorage.removeItem('aindai_job'); go('home'); }
     `<button class="chip" data-slug="${c.slug}" data-name="${esc(c.name_th)}" onclick="chip(this)">${esc(short(c.name_th))}</button>`).join('');
   document.getElementById('tambonsel').innerHTML = META.tambons.map(t=>
     `<option value="${t.id}">ต.${esc(t.name)}</option>`).join('');
+  // อำเภอ — ดึงจากข้อมูลจริง (นำร่องอำเภอเดียว)
+  const amphoes = [...new Set(META.tambons.map(t=>t.amphoe))];
+  document.getElementById('amphoesel').innerHTML = amphoes.map(a=>
+    `<option>อ.${esc(a)}</option>`).join('');
   loadTopProviders();
   go('home');
-  // เปิดจากการ์ด LINE ที่ระบุหมวดมา → เด้งเข้าฟอร์มพร้อมเลือกหมวดให้
-  const cat = new URLSearchParams(location.search).get('category');
-  if(cat) pick(cat);
+  prefillFromChat();   // เปิดจากการ์ดที่คุยกับน้องเอิ้นได้ → กรอกฟอร์มให้เลย
 })();
+
+/* เติมฟอร์มจากข้อมูลที่คุยกับ AI ใน LINE (ส่งมาทาง query string) */
+function prefillFromChat(){
+  const q = new URLSearchParams(location.search);
+  const cat = q.get('category');
+  if(!cat) return;
+  pick(cat);                       // เลือกหมวด + เด้งเข้าหน้าฟอร์ม
+  const filled = [];
+
+  const tambon = (q.get('tambon')||'').replace(/^ต\.?\s*/, '').trim();
+  if(tambon){
+    const sel = document.getElementById('tambonsel');
+    const hit = [...sel.options].find(o => o.textContent.replace(/^ต\./,'').trim() === tambon)
+             || [...sel.options].find(o => o.textContent.includes(tambon));
+    if(hit){ sel.value = hit.value; filled.push('ตำบล'); }
+  }
+
+  const desc = q.get('desc');
+  if(desc){ document.getElementById('desc').value = desc; filled.push('รายละเอียดงาน'); }
+
+  const bmin = q.get('bmin'), bmax = q.get('bmax');
+  if(bmin){ document.getElementById('bmin').value = bmin; }
+  if(bmax){ document.getElementById('bmax').value = bmax; }
+  if(bmin || bmax) filled.push('งบประมาณ');
+
+  const when = q.get('when') || '';
+  if(when){
+    const daySel = document.getElementById('daysel'), timeSel = document.getElementById('timesel');
+    const day = [...daySel.options].find(o => when.includes(o.textContent));
+    if(day) daySel.value = day.value;
+    const time = [...timeSel.options].find(o => when.includes(o.textContent));
+    if(time) timeSel.value = time.value;
+    if(day || time) filled.push('วันเวลา');
+  }
+
+  if(filled.length){
+    const note = document.createElement('div');
+    note.className = 'escrow';
+    note.style.margin = '0 18px 4px';
+    note.innerHTML = '✅ <span>น้องเอิ้นได้กรอก <b>' + filled.join(' • ') +
+                     '</b> จากที่คุยกันให้แล้วครับ ตรวจดูอีกทีแล้วกดส่งได้เลย</span>';
+    const form = document.getElementById('post');
+    form.insertBefore(note, form.querySelector('label.f'));
+  }
+}
 
 async function loadTopProviders(){
   try{

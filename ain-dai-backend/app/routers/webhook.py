@@ -73,8 +73,9 @@ async def handle_event(event: dict) -> None:
                 messages: list[dict] = []
                 if ai["text"]:
                     messages.append({"type": "text", "text": ai["text"]})
-                if ai["category_slug"]:
-                    messages.append(flex.open_form_message(ai["category_slug"]))
+                if ai["form"]:
+                    # ส่งปุ่มพร้อมข้อมูลที่คุยไว้ → หน้าเว็บกรอกให้อัตโนมัติ
+                    messages.append(flex.open_form_message(**ai["form"]))
                 await line_api.reply(reply_token, messages)
                 return
 
