@@ -134,6 +134,14 @@ label.f{display:block;font-family:'Mitr';font-size:13.5px;margin:14px 0 6px}
       <div id="byTambon"></div>
     </div>
     <div class="card">
+      <h2>💬 ลิงก์กลุ่ม OpenChat ประจำหมวดงาน</h2>
+      <div class="muted" style="margin-bottom:10px">
+        วางลิงก์เชิญเข้ากลุ่ม (ปุ่ม “แชร์ลิงก์” ในกลุ่ม OpenChat) — พออนุมัติช่าง
+        ระบบจะส่งปุ่มเข้ากลุ่มให้ช่างกดเข้าได้ทันที
+      </div>
+      <div id="groupLinks"></div>
+    </div>
+    <div class="card">
       <h2>ส่งออกข้อมูล (CSV เปิดด้วย Excel ได้)</h2>
       <div class="row">
         <button class="btn ghost" onclick="dl('jobs')">📥 รายงานงานทั้งหมด</button>
@@ -296,6 +304,26 @@ async function loadOverview(){
     ['ตำบล','งานทั้งหมด','สำเร็จแล้ว'],
     s.by_tambon.map(t=>['ต.'+esc(t.tambon), num(t.jobs), num(t.done)]))
     : '<div class="muted">ยังไม่มีงานในระบบ</div>';
+  loadGroupLinks();
+}
+
+async function loadGroupLinks(){
+  const rows = await api('/category-groups');
+  document.getElementById('groupLinks').innerHTML = table(
+    ['หมวดงาน','ลิงก์เชิญเข้ากลุ่ม',''],
+    rows.map(g=>[
+      `${g.icon||''} ${esc(g.name_th)}`,
+      `<input type="text" id="gl${g.category_id}" style="width:min(420px,100%)"
+              placeholder="https://line.me/ti/g2/..." value="${esc(g.openchat_url||'')}">`,
+      `<button class="btn sm" onclick="saveGroupLink(${g.category_id})">บันทึก</button>
+       ${g.openchat_url?`<a class="btn sm ghost" href="${esc(g.openchat_url)}" target="_blank">เปิดกลุ่ม</a>`:''}`,
+    ]));
+}
+async function saveGroupLink(catId){
+  const url = document.getElementById('gl'+catId).value.trim();
+  await api('/category-groups',{method:'POST',body:{category_id:catId, openchat_url:url||null}});
+  alert('บันทึกลิงก์กลุ่มแล้ว');
+  loadGroupLinks();
 }
 function kpi(lb,v,cls=''){return `<div class="kpi ${cls}"><div class="lb">${lb}</div><div class="v">${v}</div></div>`}
 function badge(id,n){const e=document.getElementById(id);e.style.display=n>0?'inline-block':'none';e.textContent=n}
@@ -370,6 +398,14 @@ function openDrawer(id){
     <input type="text" id="dTags" style="width:100%"
            placeholder="เช่น ล้างแอร์ติดผนัง, เติมน้ำยา, ปะยาง" value="${esc((p.skill_tags||[]).join(', '))}">
 
+    <label class="f">เลขประจำตัวประชาชน 13 หลัก <span class="muted">(กรอกจากบัตร — ใช้ออกใบ 50 ทวิ)</span></label>
+    <input type="text" id="dNid" style="width:100%" maxlength="20"
+           placeholder="x-xxxx-xxxxx-xx-x" value="${esc(p.national_id||'')}">
+
+    <label class="f">ที่อยู่ตามบัตร <span class="muted">(ใช้ออกใบ 50 ทวิ)</span></label>
+    <input type="text" id="dAddr" style="width:100%" maxlength="300"
+           placeholder="บ้านเลขที่ หมู่ ตำบล อำเภอ จังหวัด" value="${esc(p.address||'')}">
+
     <label class="f">บันทึกแอดมิน / เหตุผล</label>
     <textarea id="dNote" placeholder="ระบุเหตุผลเมื่อขอเอกสารเพิ่มหรือปฏิเสธ">${esc(p.admin_note||'')}</textarea>
 
@@ -397,10 +433,16 @@ async function doApprove(){
   if(!slugs.length) return alert('เลือกหมวดที่อนุญาตให้รับงานอย่างน้อย 1 หมวด');
   const tier = +document.getElementById('dTier').value;
   const tags = document.getElementById('dTags').value.split(',').map(s=>s.trim()).filter(Boolean);
-  await api(`/providers/${CURRENT.id}/approve`,{method:'POST',body:{
+  const r = await api(`/providers/${CURRENT.id}/approve`,{method:'POST',body:{
     category_slugs:slugs, tier, skill_tags:tags, verified:tier>=2,
-    admin_note:document.getElementById('dNote').value.trim()||null}});
-  closeDrawer(); alert('อนุมัติแล้ว แจ้งช่างทาง LINE เรียบร้อย'); loadApprove(); loadOverview();
+    admin_note:document.getElementById('dNote').value.trim()||null,
+    national_id:document.getElementById('dNid').value.trim()||null,
+    address:document.getElementById('dAddr').value.trim()||null}});
+  closeDrawer();
+  alert('อนุมัติแล้ว แจ้งช่างทาง LINE เรียบร้อย' +
+        (r.invited ? `\nส่งปุ่มเข้ากลุ่ม ${r.invited} กลุ่มให้ช่างแล้ว` :
+         '\n(ยังไม่ได้ตั้งลิงก์กลุ่ม OpenChat — ตั้งได้ที่แท็บภาพรวม)'));
+  loadApprove(); loadOverview();
 }
 async function doAction(kind){
   const reason = document.getElementById('dNote').value.trim();
@@ -428,10 +470,18 @@ async function loadDirectory(){
       p.rating_count>0?`★ ${(+p.rating_avg).toFixed(2)} <span class="muted">(${p.rating_count})</span>`:'-',
       p.active?'<span class="chip">รับงานได้</span>':'<span class="chip danger">ระงับอยู่</span>',
       `<button class="btn sm ghost" onclick='openDrawer(${JSON.stringify(p.id)})'>แก้ไข</button>
+       <button class="btn sm navy" onclick="invite('${p.id}')">💬 ส่งลิงก์กลุ่ม</button>
        <button class="btn sm ${p.active?'danger':''}" onclick="suspend('${p.id}',${!p.active})">
          ${p.active?'ระงับ':'เปิดรับงาน'}</button>`,
     ])) : '<div class="muted">ไม่พบช่างตามเงื่อนไข</div>';
 }
+async function invite(id){
+  try{
+    const r = await api(`/providers/${id}/invite`,{method:'POST'});
+    alert(`ส่งปุ่มเข้ากลุ่ม ${r.sent} กลุ่มให้ช่างทาง LINE แล้วครับ`);
+  }catch(e){ alert(e.message); }
+}
+
 async function suspend(id,active){
   const reason = active?null:prompt('เหตุผลที่ระงับการรับงาน (แจ้งช่างทาง LINE)');
   if(!active && reason===null) return;
@@ -512,12 +562,13 @@ async function loadFinance(){
       STATUS_TH[e.job_status]||e.job_status, dt(e.paid_at)]))
     : '<div class="muted">ไม่มีเงินค้างใน escrow</div>';
   document.getElementById('payoutList').innerHTML = f.payouts.length ? table(
-    ['วันที่','งาน','ช่าง','พร้อมเพย์','ยอดงาน','ช่างได้รับ','สถานะ',''],
+    ['วันที่','งาน','ช่าง','พร้อมเพย์','ยอดงาน','ช่างได้รับ','ภาษี 1%','สถานะ',''],
     f.payouts.map(p=>[dt(p.created_at),esc(p.title),esc(p.provider_name||'-'),
       p.promptpay_id ? esc(p.promptpay_id) : '<span class="chip danger">ยังไม่ผูกพร้อมเพย์</span>',
-      money(p.gross)+' ฿', `<b>${money(p.provider_net)} ฿</b>`,
+      money(p.gross)+' ฿', `<b>${money(p.provider_net)} ฿</b>`, money(p.tax_withheld)+' ฿',
       p.status==='transferred'?'<span class="chip">โอนแล้ว</span>':'<span class="chip warn">รอโอน</span>',
-      p.status==='transferred'?'':`<button class="btn sm" onclick="markPaid('${p.id}')">ยืนยันโอนแล้ว</button>`]))
+      `<button class="btn sm navy" onclick="whtPdf('${p.id}')">📄 ใบ 50 ทวิ</button>
+       ${p.status==='transferred'?'':`<button class="btn sm" onclick="markPaid('${p.id}')">ยืนยันโอนแล้ว</button>`}`]))
     : '<div class="muted">ยังไม่มีรายการแบ่งรายได้</div>';
   document.getElementById('fundList').innerHTML = f.fund.length ? table(
     ['วันที่','ตำบล','จำนวน','หมายเหตุ'],
@@ -526,6 +577,19 @@ async function loadFinance(){
       esc(x.note||'')]))
     : '<div class="muted">ยังไม่มีเงินเข้ากองทุน</div>';
 }
+/* ใบ 50 ทวิ — ดึง PDF พร้อม token แล้วเปิดในแท็บใหม่ */
+async function whtPdf(id){
+  try{
+    const res = await fetch(`/api/admin/settlements/${id}/wht.pdf`,{headers:{'X-Admin-Token':TOKEN}});
+    if(!res.ok){
+      const e = await res.json().catch(()=>({}));
+      return alert('ออกใบ 50 ทวิ ไม่สำเร็จ: ' + (e.detail||res.status));
+    }
+    const url = URL.createObjectURL(await res.blob());
+    window.open(url,'_blank');
+  }catch(e){ alert('ออกใบ 50 ทวิ ไม่สำเร็จ: '+e.message); }
+}
+
 async function markPaid(id){
   if(!confirm('ยืนยันว่าโอนเงินเข้าบัญชีช่างเรียบร้อยแล้ว?')) return;
   await api(`/settlements/${id}/mark-transferred`,{method:'POST'});

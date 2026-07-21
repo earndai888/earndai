@@ -22,6 +22,10 @@ class Settings(BaseSettings):
     pilot_amphoe: str = "กันทรลักษ์"
     # รหัสเข้าหน้าแอดมิน — เว้นว่าง = ปิดหน้าแอดมินทั้งหมด (ต้องตั้งค่าเองก่อนใช้)
     admin_token: str = ""
+    # ข้อมูลผู้มีหน้าที่หักภาษี ณ ที่จ่าย — ใช้พิมพ์บนใบ 50 ทวิ
+    company_name: str = "เอิ้นได้"
+    company_tax_id: str = ""
+    company_address: str = ""
     # AI ชั้นที่ 2 — คุยโต้ตอบผ่าน Gemini ก่อนส่งลิงก์ฟอร์ม
     # (เว้นว่าง = ปิด ใช้ keyword matching อย่างเดียว) — คีย์ฟรีจาก aistudio.google.com/apikey
     gemini_api_key: str = ""

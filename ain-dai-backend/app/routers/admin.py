@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from .. import db, line_api
+from .. import db, flex, line_api, wht
 from ..config import settings
 
 router = APIRouter(prefix="/api/admin")
@@ -107,6 +107,7 @@ async def list_providers(
         SELECT p.id, p.approval_status, p.tier, p.skill_tags, p.active, p.verified,
                p.bio, p.promptpay_id, p.rating_avg, p.rating_count, p.jobs_done,
                p.id_card_url, p.selfie_url, p.license_url, p.admin_note,
+               p.national_id, p.address,
                p.created_at, p.reviewed_at, p.categories, p.tambon_coverage,
                u.line_user_id, u.display_name, u.phone,
                (SELECT array_agg(c.name_th ORDER BY c.id) FROM service_categories c
@@ -144,6 +145,9 @@ class ApproveIn(BaseModel):
     skill_tags: list[str] = []
     verified: bool = False
     admin_note: str | None = None
+    # กรอกจากบัตร ปชช. — ใช้ออกใบ 50 ทวิ
+    national_id: str | None = Field(default=None, max_length=20)
+    address: str | None = Field(default=None, max_length=300)
 
 
 @router.post("/providers/{provider_id}/approve")
@@ -166,26 +170,30 @@ async def approve_provider(provider_id: str, body: ApproveIn, _: bool = Admin):
 
     await pool.execute(
         """UPDATE providers SET approval_status='approved', active=true, categories=$2,
-               tier=$3, skill_tags=$4, verified=$5, admin_note=$6, reviewed_at=now()
+               tier=$3, skill_tags=$4, verified=$5, admin_note=$6, reviewed_at=now(),
+               national_id = COALESCE($7, national_id),
+               address     = COALESCE($8, address)
             WHERE id = $1::uuid""",
-        provider_id, cats, body.tier, body.skill_tags, body.verified, body.admin_note)
+        provider_id, cats, body.tier, body.skill_tags, body.verified, body.admin_note,
+        body.national_id, body.address)
 
     names = await pool.fetch(
         "SELECT name_th FROM service_categories WHERE id = ANY($1::int[])", cats)
     cat_txt = ", ".join(r["name_th"] for r in names)
-    links = await pool.fetch(
-        """SELECT c.name_th, g.openchat_url FROM category_line_groups g
-             JOIN service_categories c ON c.id = g.category_id
-            WHERE g.category_id = ANY($1::int[]) AND g.active
-              AND g.openchat_url IS NOT NULL""", cats)
-    link_txt = "".join(f"\n• {r['name_th']}: {r['openchat_url']}" for r in links)
     await notify(prov["line_user_id"],
                  f"🎉 ยินดีด้วยครับ! เอิ้นได้อนุมัติให้คุณเป็นช่างแล้ว\n"
                  f"หมวดที่รับงานได้: {cat_txt}\n"
                  f"ระดับ: Level {body.tier}\n\n"
-                 f"เปิดหน้าช่างเพื่อรับงานได้เลยครับ"
-                 + (f"\n\nเข้ากลุ่มช่างประจำหมวด:{link_txt}" if link_txt else ""))
-    return {"ok": True}
+                 f"เปิดหน้าช่างเพื่อรับงานได้เลยครับ")
+
+    # การ์ดปุ่มเข้ากลุ่ม OpenChat ประจำหมวด (ถ้าตั้งลิงก์ไว้แล้ว)
+    links = await _group_links(cats)
+    if links:
+        try:
+            await line_api.push(prov["line_user_id"], [flex.openchat_invite(links)])
+        except Exception:
+            log.warning("ส่งการ์ดเข้ากลุ่มให้ %s ไม่สำเร็จ", prov["line_user_id"])
+    return {"ok": True, "invited": len(links)}
 
 
 class RejectIn(BaseModel):
@@ -439,6 +447,106 @@ async def list_disputes(status: str = "open", _: bool = Admin):
          ORDER BY d.created_at DESC LIMIT 100""", status)
     return [dict(r) | {"id": str(r["id"]), "job_id": str(r["job_id"]),
                        "created_at": r["created_at"].isoformat()} for r in rows]
+
+
+# ══════════ ใบ 50 ทวิ (PDF) ══════════
+
+@router.get("/settlements/{settlement_id}/wht.pdf")
+async def wht_pdf(settlement_id: str, _: bool = Admin):
+    """หนังสือรับรองการหักภาษี ณ ที่จ่าย (50 ทวิ) ของรายการแบ่งรายได้นี้"""
+    pool = db.get_pool()
+    row = await pool.fetchrow("""
+        SELECT s.id, s.gross, s.tax_withheld, s.created_at, s.wht_no,
+               j.title, u.display_name AS payee_name,
+               pr.national_id, pr.address
+          FROM settlements s
+          JOIN jobs j ON j.id = s.job_id
+          LEFT JOIN bids b ON b.id = j.assigned_bid_id
+          LEFT JOIN providers pr ON pr.id = b.provider_id
+          LEFT JOIN users u ON u.id = pr.user_id
+         WHERE s.id = $1::uuid""", settlement_id)
+    if not row:
+        raise HTTPException(404, "ไม่พบรายการนี้")
+
+    wht_no = row["wht_no"]
+    if not wht_no:   # เดินเลขใบกำกับครั้งแรกที่ออก แล้วล็อกไว้กับรายการนี้
+        wht_no = await pool.fetchval("SELECT nextval('wht_no_seq')")
+        await pool.execute("UPDATE settlements SET wht_no = $2 WHERE id = $1::uuid",
+                           settlement_id, wht_no)
+    try:
+        pdf = wht.build_pdf({
+            "payer_name": settings.company_name,
+            "payer_tax_id": settings.company_tax_id,
+            "payer_address": settings.company_address,
+            "payee_name": row["payee_name"] or "-",
+            "payee_tax_id": row["national_id"],
+            "payee_address": row["address"],
+            "wht_no": f"{wht_no:05d}",
+            "pay_date": row["created_at"].date(),
+            "amount": row["gross"],
+            "tax": row["tax_withheld"],
+            "job_title": row["title"],
+        })
+    except RuntimeError as e:
+        raise HTTPException(500, str(e))
+    return Response(pdf, media_type="application/pdf", headers={
+        "Content-Disposition": f'inline; filename="wht-{wht_no:05d}.pdf"'})
+
+
+# ══════════ กลุ่ม OpenChat ต่อหมวดงาน ══════════
+
+@router.get("/category-groups")
+async def category_groups(_: bool = Admin):
+    rows = await db.get_pool().fetch("""
+        SELECT c.id AS category_id, c.slug, c.name_th, c.icon,
+               g.group_id, g.openchat_url, g.active
+          FROM service_categories c
+          LEFT JOIN category_line_groups g ON g.category_id = c.id
+         WHERE c.active ORDER BY c.id""")
+    return [dict(r) for r in rows]
+
+
+class GroupLinkIn(BaseModel):
+    category_id: int
+    openchat_url: str | None = None
+
+
+@router.post("/category-groups")
+async def set_group_link(body: GroupLinkIn, _: bool = Admin):
+    url = (body.openchat_url or "").strip() or None
+    if url and not url.startswith("https://"):
+        raise HTTPException(400, "ลิงก์ต้องขึ้นต้นด้วย https://")
+    await db.get_pool().execute("""
+        INSERT INTO category_line_groups (category_id, openchat_url, active)
+        VALUES ($1, $2, true)
+        ON CONFLICT (category_id) DO UPDATE SET openchat_url = $2, active = true""",
+        body.category_id, url)
+    return {"ok": True}
+
+
+@router.post("/providers/{provider_id}/invite")
+async def resend_invite(provider_id: str, _: bool = Admin):
+    """ส่งการ์ดปุ่มเข้ากลุ่ม OpenChat ให้ช่างอีกครั้ง"""
+    pool = db.get_pool()
+    prov = await pool.fetchrow(
+        """SELECT p.categories, u.line_user_id FROM providers p
+             JOIN users u ON u.id = p.user_id WHERE p.id = $1::uuid""", provider_id)
+    if not prov:
+        raise HTTPException(404, "ไม่พบช่างรายนี้")
+    links = await _group_links(prov["categories"])
+    if not links:
+        raise HTTPException(400, "ยังไม่ได้ตั้งลิงก์กลุ่มของหมวดที่ช่างรับ")
+    await line_api.push(prov["line_user_id"], [flex.openchat_invite(links)])
+    return {"ok": True, "sent": len(links)}
+
+
+async def _group_links(category_ids) -> list[dict]:
+    rows = await db.get_pool().fetch("""
+        SELECT c.name_th, c.icon, g.openchat_url
+          FROM category_line_groups g JOIN service_categories c ON c.id = g.category_id
+         WHERE g.category_id = ANY($1::int[]) AND g.active
+           AND g.openchat_url IS NOT NULL""", list(category_ids or []))
+    return [dict(r) for r in rows]
 
 
 # ══════════ 6. Export CSV ══════════

@@ -13,6 +13,32 @@ def liff_url(path: str = "") -> str:
     return f"https://liff.line.me/{settings.liff_id}{path}"
 
 
+def openchat_invite(links: list[dict]) -> dict:
+    """การ์ดปุ่มเข้ากลุ่มช่างประจำหมวด — ช่างกดปุ่มเดียวเข้ากลุ่มได้เลย
+    (LINE ไม่มี API ดึงคนเข้ากลุ่ม ผู้ใช้ต้องกดยอมรับเอง)"""
+    buttons = [
+        {"type": "button", "style": "primary", "color": GREEN, "height": "sm", "margin": "sm",
+         "action": {"type": "uri", "label": f"{l.get('icon') or '💬'} เข้ากลุ่ม{l['name_th']}"[:40],
+                    "uri": l["openchat_url"]}}
+        for l in links[:4]
+    ]
+    return {
+        "type": "flex",
+        "altText": "เชิญเข้ากลุ่มช่างเอิ้นได้",
+        "contents": {
+            "type": "bubble",
+            "body": {"type": "box", "layout": "vertical", "spacing": "sm", "contents": [
+                {"type": "text", "text": "เข้ากลุ่มช่างเอิ้นได้", "weight": "bold",
+                 "size": "lg", "color": NAVY, "wrap": True},
+                {"type": "text", "text": "กดปุ่มด้านล่างเพื่อเข้ากลุ่มรับงานประจำหมวดของคุณครับ "
+                                         "งานใหม่จะแจ้งเข้ากลุ่มนี้",
+                 "size": "sm", "color": "#68776C", "wrap": True},
+            ]},
+            "footer": {"type": "box", "layout": "vertical", "contents": buttons},
+        },
+    }
+
+
 def open_form_message(
     category_slug: str | None,
     description: str | None = None,
