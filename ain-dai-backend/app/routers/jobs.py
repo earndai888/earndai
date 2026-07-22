@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from .. import contract, db, flex, line_api, promptpay, thai_id
+from .. import contact_guard, contract, db, flex, line_api, promptpay, thai_id
 from ..config import settings
 from ..intent import CATEGORY_NAMES, subcategories_of
 from ..settlement import FeeConfig, compute_split
@@ -159,6 +159,10 @@ async def provider_contract():
 def _check_identity(body: ProviderRegisterIn, existing: dict | None) -> dict:
     """ตรวจข้อมูลยืนยันตัวตน → คืนค่าที่ล้างแล้วพร้อมบันทึก
     แก้โปรไฟล์โดยไม่สแกนหน้า/เซ็นใหม่ได้ ถ้าเคยทำไว้แล้วและสัญญายังเวอร์ชันเดิม"""
+    # ชื่อร้านกับคำแนะนำตัวคือสองอย่างเดียวที่ลูกค้าเห็น — ห้ามมีช่องทางติดต่อตรง
+    for text, where in ((body.display_name, "ชื่อที่แสดงให้ลูกค้าเห็น"), (body.bio, "คำแนะนำตัว")):
+        if kind := contact_guard.find_contact_leak(text):
+            raise HTTPException(400, contact_guard.message(kind, where))
     if not thai_id.valid_full_name(body.full_name):
         raise HTTPException(400, "กรอกทั้งชื่อและนามสกุลจริงตามบัตรประชาชนครับ")
     if not thai_id.valid_national_id(body.national_id):
@@ -396,6 +400,9 @@ async def create_bid(job_id: str, body: BidIn, user: dict = Depends(current_user
     job = await pool.fetchrow("SELECT * FROM jobs WHERE id = $1::uuid", job_id)
     if not job or job["status"] not in ("open", "bidding"):
         raise HTTPException(400, "งานนี้ปิดรับข้อเสนอแล้ว")
+    # ข้อความเสนอราคาลูกค้าอ่านก่อนเลือกจ้าง — เป็นช่องหลักที่จะแอบทิ้งเบอร์ไว้
+    if kind := contact_guard.find_contact_leak(body.message):
+        raise HTTPException(400, contact_guard.message(kind, "ข้อความเสนอราคา"))
     bid = await pool.fetchrow(
         """INSERT INTO bids (job_id, provider_id, price, message, available_at)
            VALUES ($1,$2,$3,$4,$5)

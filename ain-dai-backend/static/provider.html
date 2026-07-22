@@ -21,7 +21,7 @@
     <h1 id="preghead">สมัครเป็นช่างกับเอิ้นได้</h1>
     <p>รับงานใกล้บ้าน เลือกงานเองได้ เงินเข้าแน่นอนผ่านระบบ escrow</p>
   </div>
-  <div class="sect"><h2>1. ข้อมูลตัวจริง</h2></div>
+  <div class="sect"><h2>1. ข้อมูลตัวจริง <span class="lock">🔒 ลูกค้าไม่เห็น</span></h2></div>
   <label class="f">ชื่อ-นามสกุลจริง (ตามบัตรประชาชน) *</label>
   <input class="inp" id="rfullname" placeholder="เช่น สมชาย ใจดี" maxlength="120" autocomplete="name">
   <label class="f">เลขบัตรประชาชน 13 หลัก *</label>
@@ -31,9 +31,20 @@
   <label class="f">เบอร์โทรศัพท์ *</label>
   <input class="inp" id="rphone" placeholder="08xxxxxxxx" inputmode="tel" maxlength="20" autocomplete="tel">
 
-  <div class="sect"><h2>2. ข้อมูลที่ลูกค้าเห็น</h2></div>
+  <div class="sect"><h2>2. ชื่อที่ลูกค้าเห็น <span class="eye">👁 ลูกค้าเห็น</span></h2></div>
   <label class="f">ชื่อที่แสดงให้ลูกค้าเห็น *</label>
-  <input class="inp" id="rname" placeholder="เช่น ช่างเอก รับเหมาไฟฟ้า" maxlength="60">
+  <input class="inp" id="rname" placeholder="เช่น ช่างเอก รับเหมาไฟฟ้า" maxlength="60"
+         oninput="renderPublicPreview()">
+  <label class="f">แนะนำตัวสั้นๆ</label>
+  <textarea class="ta" id="rbio" maxlength="300" oninput="renderPublicPreview()"
+            placeholder="เช่น ประสบการณ์ 10 ปี เครื่องมือครบ เก็บงานเรียบร้อย"></textarea>
+  <div class="note" style="margin:-2px 18px 8px">ห้ามใส่เบอร์โทรหรือไอดีไลน์ในช่องนี้ —
+    ลูกค้าติดต่อผ่านระบบเท่านั้น เพื่อให้ระบบคุ้มครองเงินให้ทั้งสองฝ่ายได้</div>
+
+  <label class="f">ลูกค้าจะเห็นแค่นี้</label>
+  <div id="publicpreview" class="preview"></div>
+
+  <div class="sect"><h2>3. รับงานอะไร ที่ไหน</h2></div>
   <label class="f">รับงานหมวดไหนบ้าง * (เลือกได้หลายหมวด)</label>
   <div class="chips" id="rcats"></div>
   <!-- งานด่วน 24 ชม. — ช่างรถไถกับช่างกุญแจคนละคน ต้องระบุว่ารับงานแบบไหน -->
@@ -44,12 +55,16 @@
   </div>
   <label class="f">รับงานตำบลไหนบ้าง * (เลือกได้หลายตำบล)</label>
   <div class="chips" id="rtambons"></div>
-  <label class="f">แนะนำตัวสั้นๆ</label>
-  <textarea class="ta" id="rbio" maxlength="300" placeholder="เช่น ประสบการณ์ 10 ปี เครื่องมือครบ เก็บงานเรียบร้อย"></textarea>
-  <label class="f">เบอร์ PromptPay รับเงินค่าจ้าง</label>
-  <input class="inp" id="rpromptpay" placeholder="เบอร์มือถือหรือเลขบัตรประชาชน" maxlength="20">
 
-  <div class="sect"><h2>3. เอกสารยืนยันตัวตน</h2></div>
+  <div class="sect"><h2>4. บัญชีรับเงินค่าจ้าง <span class="lock">🔒 ลูกค้าไม่เห็น</span></h2></div>
+  <div class="escrow" style="margin:6px 18px 2px">🛡 <span>ลูกค้า<b>ไม่โอนเงินให้ช่างโดยตรง</b> —
+    ลูกค้าจ่ายเข้าบัญชีกลางของเอิ้นได้ก่อน พองานเสร็จและลูกค้ากดยืนยัน
+    ระบบจึงโอนส่วนของช่างเข้าพร้อมเพย์นี้ ช่างไม่โดนเบี้ยว ลูกค้าไม่โดนทิ้งงาน</span></div>
+  <label class="f">เบอร์พร้อมเพย์ที่จะรับเงิน</label>
+  <input class="inp" id="rpromptpay" placeholder="เบอร์มือถือหรือเลขบัตรประชาชน" maxlength="20">
+  <div class="note" style="margin:-2px 18px 8px">เห็นเฉพาะช่างเจ้าของบัญชีและแอดมินที่โอนเงินให้เท่านั้น</div>
+
+  <div class="sect"><h2>5. เอกสารยืนยันตัวตน <span class="lock">🔒 ลูกค้าไม่เห็น</span></h2></div>
   <div class="photo" onclick="document.getElementById('idcard').click()" id="idcardbox">🪪 รูปบัตรประชาชน</div>
   <input type="file" id="idcard" accept="image/*" style="display:none" onchange="upDoc('id_card_url','idcardbox',this.files[0])">
   <div class="photo" onclick="document.getElementById('selfie').click()" id="selfiebox">🤳 รูปถ่ายคู่กับบัตรประชาชน</div>
@@ -57,13 +72,13 @@
   <div class="photo" onclick="document.getElementById('license').click()" id="licensebox">🚗 ใบขับขี่/ทะเบียนรถ (เฉพาะงานด่วน)</div>
   <input type="file" id="license" accept="image/*" style="display:none" onchange="upDoc('license_url','licensebox',this.files[0])">
 
-  <div class="sect"><h2>4. สแกนใบหน้า *</h2></div>
+  <div class="sect"><h2>6. สแกนใบหน้า * <span class="lock">🔒 ลูกค้าไม่เห็น</span></h2></div>
   <div class="photo" id="facebox" onclick="openFaceScan()">📷 แตะเพื่อสแกนใบหน้า</div>
   <div class="note" style="margin:-4px 18px 10px">ถ่ายสดจากกล้องหน้าเท่านั้น (เลือกรูปจากคลังไม่ได้)
     แอดมินจะเทียบกับรูปบัตรก่อนอนุมัติ</div>
   <div id="facethumbs" class="thumbs"></div>
 
-  <div class="sect"><h2>5. หนังสือสัญญา *</h2></div>
+  <div class="sect"><h2>7. หนังสือสัญญา *</h2></div>
   <div class="contract" id="contractbox">กำลังโหลดหนังสือสัญญา…</div>
   <label class="chk"><input type="checkbox" id="ragree">
     <span>ข้าพเจ้าได้อ่านและยอมรับหนังสือสัญญาข้างต้นทั้งหมด</span></label>
@@ -164,6 +179,41 @@ async function upDoc(field, boxId, file){
     box.style.borderColor = 'var(--green)';
     box.style.background = 'var(--green-pale)';
   }catch(e){ box.textContent = label; alert('อัปโหลดไม่สำเร็จ: '+e.message); }
+}
+
+/* ── ลูกค้าเห็นอะไรบ้าง: โชว์ให้ช่างดูตรงๆ ว่าเห็นแค่ชื่อ คะแนนรีวิว และคำแนะนำตัว ── */
+function renderPublicPreview(){
+  const box = document.getElementById('publicpreview');
+  if(!box) return;
+  const p = state.me && state.me.provider;
+  const name = document.getElementById('rname').value.trim() || 'ชื่อที่ตั้งไว้';
+  const bio = document.getElementById('rbio').value.trim();
+  const rating = p && p.rating_count
+    ? `<span class="star">★</span> ${(+p.rating_avg).toFixed(1)} (${p.rating_count} รีวิว) · ${p.jobs_done} งาน`
+    : 'ยังไม่มีรีวิว (ช่างใหม่)';
+  box.innerHTML =
+    `<div class="pname">👷 ${esc(name)}</div>
+     <div class="pmeta">${rating}</div>` +
+    (bio ? `<div class="pbio">${esc(bio)}</div>` : '') +
+    `<div class="phidden">ลูกค้าไม่เห็น: เบอร์โทร · ชื่อจริง · เลขบัตร · รูปสแกนหน้า · เลขพร้อมเพย์<br>
+       ลูกค้าจ่ายเงินเข้าบัญชีกลางของเอิ้นได้ ไม่ได้โอนให้ช่างโดยตรง</div>`;
+}
+
+/* ── กันนัดคุยนอกระบบ: ห้ามใส่เบอร์โทร/ไอดีไลน์ในข้อความที่ลูกค้าเห็น ──
+   ตรรกะต้องตรงกับ app/contact_guard.py ฝั่งเซิร์ฟเวอร์ (ที่นี่แค่เตือนไว
+   ของจริงบังคับที่เซิร์ฟเวอร์) */
+const THAI_DIGITS = {'๐':'0','๑':'1','๒':'2','๓':'3','๔':'4','๕':'5','๖':'6','๗':'7','๘':'8','๙':'9'};
+function findContactLeak(text){
+  if(!text) return null;
+  const flat = text.replace(/[๐-๙]/g, d=>THAI_DIGITS[d]).replace(/[\s\-().]/g,'');
+  // เบอร์ไทยขึ้นต้นด้วย 0 เสมอ — เช็คหลักขึ้นต้นด้วย ไม่งั้น "9000-24000 BTU" จะโดนหาว่าเป็นเบอร์
+  for(const m of flat.matchAll(/\d+/g)){
+    let run = m[0];
+    if(run.startsWith('66')) run = '0' + run.slice(2);
+    if(run.startsWith('0') && (run.length === 9 || run.length === 10)) return 'เบอร์โทร';
+  }
+  if(/(ไลน์|line|ไอดี|id)\s*[:=]?\s*@?[a-z0-9._-]{4,}/i.test(text)) return 'ไอดีไลน์';
+  return null;
 }
 
 /* ── เลขบัตรประชาชน: ใส่ขีดให้อัตโนมัติ + ตรวจหลักตรวจสอบทันที ── */
@@ -385,6 +435,7 @@ function prefillRegister(){
   syncSubs();
   const tams = p ? p.tambon_coverage : [];
   document.querySelectorAll('#rtambons .chip').forEach(c=>c.classList.toggle('on', tams.includes(+c.dataset.id)));
+  renderPublicPreview();
 }
 
 /* โชว์ตัวเลือกงานย่อยเฉพาะหมวดที่ช่างติ๊กไว้ */
@@ -424,6 +475,10 @@ async function register(){
   if(!validNid(nid)) return alert('เลขบัตรประชาชนไม่ถูกต้อง ลองตรวจดูอีกทีครับ');
   if(phone.replace(/\D/g,'').length < 9) return alert('กรอกเบอร์โทรศัพท์ให้ถูกต้องครับ');
   if(name.length < 2) return alert('ใส่ชื่อที่แสดงให้ลูกค้าเห็นก่อนครับ');
+  const bio = document.getElementById('rbio').value.trim();
+  const leak = findContactLeak(name) || findContactLeak(bio);
+  if(leak) return alert(`ห้ามใส่${leak}ในชื่อร้านหรือคำแนะนำตัวครับ\n\n` +
+    'ลูกค้าติดต่อและจ่ายเงินผ่านระบบเท่านั้น เพื่อให้เอิ้นได้คุ้มครองเงินให้ทั้งช่างและลูกค้าได้');
   if(!cats.length) return alert('เลือกหมวดงานที่รับอย่างน้อย 1 หมวดครับ');
   if(document.getElementById('rsubbox').style.display !== 'none' && !subs.length)
     return alert('เลือกด้วยครับว่ารับงานด่วนแบบไหนบ้าง');
@@ -443,7 +498,7 @@ async function register(){
     const signatureUrl = signed ? await uploadSignature() : null;
     await api('/provider/register', {method:'POST', body:{
       display_name: name, full_name: fullName, national_id: nid, phone,
-      bio: document.getElementById('rbio').value.trim() || null,
+      bio: bio || null,
       promptpay_id: document.getElementById('rpromptpay').value.trim() || null,
       category_slugs: cats, subcategory_slugs: subs, tambon_ids: tams,
       face_scan_urls: faceUrls,
