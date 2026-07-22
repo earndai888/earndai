@@ -8,10 +8,10 @@ from decimal import Decimal
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
-from .. import contact_guard, contract, db, flex, line_api, promptpay, thai_id
+from .. import contact_guard, contract, db, flex, line_api, promptpay, thai_id, vault
 from ..config import settings
 from ..intent import CATEGORY_NAMES, subcategories_of
 from ..settlement import FeeConfig, compute_split
@@ -171,9 +171,11 @@ def _check_identity(body: ProviderRegisterIn, existing: dict | None) -> dict:
     if not phone:
         raise HTTPException(400, "เบอร์โทรศัพท์ไม่ถูกต้องครับ")
 
-    # url ต้องเป็นไฟล์ที่อัปโหลดผ่าน /api/uploads เท่านั้น กันยิง url ภายนอกเข้ามา
-    urls = [*body.face_scan_urls] + ([body.contract_signature_url] if body.contract_signature_url else [])
-    if any(not u.startswith("/uploads/") for u in urls):
+    # เอกสารยืนยันตัวตนต้องอยู่ในห้องนิรภัยเท่านั้น (กันยิง url ภายนอก และกันเก็บผิดที่)
+    urls = [*body.face_scan_urls,
+            *(u for u in (body.contract_signature_url, body.id_card_url,
+                          body.selfie_url, body.license_url) if u)]
+    if any(not vault.is_secure_url(u) for u in urls):
         raise HTTPException(400, "ไฟล์แนบไม่ถูกต้อง กรุณาถ่าย/เซ็นใหม่ครับ")
 
     faces = body.face_scan_urls or (existing["face_scan_urls"] if existing else [])
@@ -274,17 +276,38 @@ async def top_providers():
 # ── อัปโหลดไฟล์ (รูป/เสียง) ─────────────────────────────
 
 @router.post("/uploads", status_code=201)
-async def upload_file(file: UploadFile = File(...), user: dict = Depends(current_user)):
+async def upload_file(file: UploadFile = File(...), secure: bool = False,
+                      user: dict = Depends(current_user)):
+    """secure=true → เอกสารยืนยันตัวตน เก็บในห้องนิรภัย เปิดดูได้เฉพาะแอดมินกับเจ้าตัว
+    ปกติ → รูปหน้างาน/เสียง ที่ลูกค้าและช่างต้องเห็นกัน"""
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXT:
         raise HTTPException(400, f"ไม่รองรับไฟล์ชนิด {ext or '(ไม่มีนามสกุล)'}")
     data = await file.read()
     if len(data) > MAX_UPLOAD:
         raise HTTPException(400, "ไฟล์ใหญ่เกิน 10 MB")
+    if secure:
+        return {"url": vault.save(data, ext)}
     name = f"{uuid.uuid4().hex}{ext}"
     UPLOAD_DIR.mkdir(exist_ok=True)
     (UPLOAD_DIR / name).write_bytes(data)
     return {"url": f"/uploads/{name}"}
+
+
+@router.get("/secure-file/{name}")
+async def secure_file(name: str, user: dict = Depends(current_user)):
+    """เอกสารยืนยันตัวตน — เจ้าตัวดูของตัวเองได้ (แอดมินดูผ่าน /api/admin/secure-file)"""
+    path = vault.resolve(name)
+    if not path:
+        raise HTTPException(404, "ไม่พบไฟล์นี้")
+    owner = await db.get_pool().fetchval(
+        f"""SELECT count(*) FROM providers
+             WHERE user_id = $1 AND ({' OR '.join(f'{c} = $2' for c in vault.SECRET_COLUMNS)}
+                   OR $2 = ANY(face_scan_urls))""",
+        user["id"], f"{vault.URL_PREFIX}{name}")
+    if not owner:
+        raise HTTPException(403, "ไม่มีสิทธิ์ดูไฟล์นี้")
+    return FileResponse(path)
 
 
 # ── สร้างงาน ────────────────────────────────────────────

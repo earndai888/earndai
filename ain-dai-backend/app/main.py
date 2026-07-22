@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import ai_chat, catalog, db
+from . import ai_chat, audit, catalog, db, vault
 from .config import settings
 from .routers import admin, jobs, webhook
 from .routers.jobs import create_settlement
@@ -36,6 +36,8 @@ async def auto_release_loop() -> None:
             for r in rows:
                 await create_settlement(r["id"])
                 log.info("auto-release งาน %s", r["id"])
+            # เก็บกวาดรูปบัตรที่ค้างจากคนสมัครไม่สำเร็จ (ไม่มีใครลบให้ ต้องกวาดเอง)
+            await vault.sweep_orphans(pool)
         except Exception:
             log.exception("auto-release ล้มเหลว")
         await asyncio.sleep(settings.auto_release_interval)
@@ -48,6 +50,9 @@ async def lifespan(app: FastAPI):
     try:
         await catalog.ensure_subcategories()  # กลุ่มงานย่อยของงานด่วน 24 ชม.
         await catalog.ensure_provider_kyc()   # คอลัมน์ยืนยันตัวตนช่าง
+        await audit.ensure_table()            # ประวัติการแก้ไข/ลบของแอดมิน
+        # เอกสารบัตร ปชช. ที่เคยเก็บในโฟลเดอร์สาธารณะ → ย้ายเข้าห้องนิรภัย
+        await vault.migrate_existing(db.get_pool())
     except Exception:
         log.exception("ซิงก์โครงสร้างฐานข้อมูลไม่สำเร็จ")
     task = asyncio.create_task(auto_release_loop())

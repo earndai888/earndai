@@ -6,13 +6,14 @@
 """
 import csv
 import io
+import json
 import logging
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
-from .. import db, flex, line_api, wht
+from .. import audit, contact_guard, db, flex, line_api, thai_id, vault, wht
 from ..config import settings
 
 router = APIRouter(prefix="/api/admin")
@@ -201,6 +202,194 @@ async def approve_provider(provider_id: str, body: ApproveIn, _: bool = Admin):
 
 class RejectIn(BaseModel):
     reason: str = Field(min_length=1, max_length=300)
+
+
+class ProviderEditIn(BaseModel):
+    """ฟิลด์ที่แอดมินแก้ให้ช่างได้ — ส่งมาเฉพาะตัวที่จะแก้ (None = ไม่แตะ)
+
+    ที่แก้ไม่ได้: คะแนนรีวิว จำนวนงาน (มาจากงานจริง) และรูปสแกนหน้า/ลายเซ็นสัญญา
+    (เป็นหลักฐานที่ช่างทำเอง แอดมินแก้แทนไม่ได้ ถ้าผิดให้ช่างทำใหม่)
+    """
+    display_name: str | None = Field(default=None, min_length=2, max_length=60)
+    full_name: str | None = Field(default=None, max_length=120)
+    phone: str | None = Field(default=None, max_length=20)
+    national_id: str | None = Field(default=None, max_length=20)
+    address: str | None = Field(default=None, max_length=300)
+    bio: str | None = Field(default=None, max_length=300)
+    promptpay_id: str | None = Field(default=None, max_length=20)
+    category_slugs: list[str] | None = None
+    subcategory_slugs: list[str] | None = None
+    tambon_ids: list[int] | None = None
+    tier: int | None = Field(default=None, ge=1, le=3)
+    skill_tags: list[str] | None = None
+    verified: bool | None = None
+    reason: str = Field(min_length=3, max_length=300)   # บันทึกไว้ว่าแก้เพราะอะไร
+
+
+@router.patch("/providers/{provider_id}")
+async def edit_provider(provider_id: str, body: ProviderEditIn, _: bool = Admin):
+    """แก้ข้อมูลช่างแทนเจ้าตัว (เช่น สะกดชื่อผิด เลขบัตรอ่านจากรูปผิด ย้ายพื้นที่)"""
+    pool = db.get_pool()
+    prov = await pool.fetchrow(
+        """SELECT p.*, u.display_name, u.phone AS user_phone, u.id AS uid
+             FROM providers p JOIN users u ON u.id = p.user_id WHERE p.id = $1::uuid""",
+        provider_id)
+    if not prov:
+        raise HTTPException(404, "ไม่พบช่างคนนี้")
+
+    changed: dict = {}
+    # ── ข้อมูลที่ลูกค้าเห็น: ต้องผ่านด่านกันเบอร์เหมือนช่างกรอกเอง ──
+    for text, where in ((body.display_name, "ชื่อที่แสดงให้ลูกค้าเห็น"), (body.bio, "คำแนะนำตัว")):
+        if kind := contact_guard.find_contact_leak(text):
+            raise HTTPException(400, contact_guard.message(kind, where))
+
+    if body.national_id is not None:
+        if not thai_id.valid_national_id(body.national_id):
+            raise HTTPException(400, "เลขบัตรประชาชนไม่ถูกต้อง")
+        nid = thai_id.normalize_id(body.national_id)
+        dup = await pool.fetchval(
+            "SELECT count(*) FROM providers WHERE national_id = $1 AND id <> $2::uuid",
+            nid, provider_id)
+        if dup:
+            raise HTTPException(400, "เลขบัตรนี้มีช่างคนอื่นใช้อยู่แล้ว")
+        changed["national_id"] = nid
+    if body.phone is not None:
+        phone = thai_id.normalize_phone(body.phone)
+        if not phone:
+            raise HTTPException(400, "เบอร์โทรศัพท์ไม่ถูกต้อง")
+        changed["phone"] = phone
+    if body.full_name is not None:
+        if not thai_id.valid_full_name(body.full_name):
+            raise HTTPException(400, "ต้องมีทั้งชื่อและนามสกุล")
+        changed["full_name"] = body.full_name.strip()
+
+    # ── หมวด/ตำบล: ต้องมีอยู่จริง ──
+    if body.category_slugs is not None:
+        if not body.category_slugs:
+            raise HTTPException(400, "ต้องมีหมวดงานอย่างน้อย 1 หมวด")
+        rows = await pool.fetch(
+            "SELECT id FROM service_categories WHERE slug = ANY($1::text[]) AND active",
+            body.category_slugs)
+        if len(rows) != len(set(body.category_slugs)):
+            raise HTTPException(400, "มีหมวดงานที่ไม่รู้จัก")
+        changed["categories"] = [r["id"] for r in rows]
+    if body.subcategory_slugs is not None:
+        rows = await pool.fetch(
+            "SELECT id FROM service_subcategories WHERE slug = ANY($1::text[]) AND active",
+            body.subcategory_slugs)
+        if len(rows) != len(set(body.subcategory_slugs)):
+            raise HTTPException(400, "มีประเภทงานย่อยที่ไม่รู้จัก")
+        changed["subcategories"] = [r["id"] for r in rows]
+    if body.tambon_ids is not None:
+        if not body.tambon_ids:
+            raise HTTPException(400, "ต้องมีตำบลที่รับงานอย่างน้อย 1 ตำบล")
+        n = await pool.fetchval("SELECT count(*) FROM tambons WHERE id = ANY($1::int[])",
+                                body.tambon_ids)
+        if n != len(set(body.tambon_ids)):
+            raise HTTPException(400, "มีตำบลที่ไม่รู้จัก")
+        changed["tambon_coverage"] = list(set(body.tambon_ids))
+
+    for field in ("address", "bio", "promptpay_id", "tier", "skill_tags", "verified"):
+        if (val := getattr(body, field)) is not None:
+            changed[field] = val
+
+    # ชื่อกับเบอร์อยู่ตาราง users ส่วนที่เหลืออยู่ providers
+    user_fields = {k: changed.pop(k) for k in ("phone",) if k in changed}
+    if body.display_name is not None:
+        user_fields["display_name"] = body.display_name.strip()
+    if changed:
+        sets = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(changed))
+        await pool.execute(f"UPDATE providers SET {sets} WHERE id = $1::uuid",
+                           provider_id, *changed.values())
+    if user_fields:
+        sets = ", ".join(f"{k} = ${i + 2}" for i, k in enumerate(user_fields))
+        await pool.execute(f"UPDATE users SET {sets} WHERE id = $1", prov["uid"], *user_fields.values())
+    if not changed and not user_fields:
+        raise HTTPException(400, "ไม่มีข้อมูลที่จะแก้")
+
+    await audit.record("แก้ข้อมูลช่าง", "provider", provider_id, prov["display_name"],
+                       reason=body.reason, **changed, **user_fields)
+    return {"ok": True, "changed": sorted([*changed, *user_fields])}
+
+
+@router.delete("/providers/{provider_id}")
+async def delete_provider(provider_id: str, reason: str = Query(min_length=3),
+                          _: bool = Admin):
+    """ลบช่างออกจากระบบ (ลบข้อมูลตัวตนทิ้งจริง เหลือประวัติงานไว้เพื่อบัญชี)
+
+    ข้อมูลบัตร/สแกนหน้า/ลายเซ็นถูกลบทั้งในฐานข้อมูลและในห้องนิรภัย
+    แต่ประวัติงานและรายการเงินยังอยู่ — ลบไม่ได้เพราะต้องใช้ยืนยันภาษีย้อนหลัง
+    """
+    pool = db.get_pool()
+    prov = await pool.fetchrow(
+        """SELECT p.*, u.display_name, u.line_user_id
+             FROM providers p JOIN users u ON u.id = p.user_id WHERE p.id = $1::uuid""",
+        provider_id)
+    if not prov:
+        raise HTTPException(404, "ไม่พบช่างคนนี้")
+
+    # งานที่ยังทำอยู่ต้องปิดให้เรียบร้อยก่อน ไม่งั้นลูกค้าค้างเติ่ง
+    busy = await pool.fetchval(
+        """SELECT count(*) FROM jobs j JOIN bids b ON b.id = j.assigned_bid_id
+            WHERE b.provider_id = $1::uuid
+              AND j.status IN ('assigned','in_progress','done','disputed')""",
+        provider_id)
+    if busy:
+        raise HTTPException(400, f"ช่างคนนี้มีงานค้างอยู่ {busy} งาน — ปิดงานให้เรียบร้อยก่อนลบครับ")
+    unpaid = await pool.fetchval(
+        """SELECT count(*) FROM settlements s
+             JOIN jobs j ON j.id = s.job_id JOIN bids b ON b.id = j.assigned_bid_id
+            WHERE b.provider_id = $1::uuid AND s.transferred_at IS NULL""",
+        provider_id)
+    if unpaid:
+        raise HTTPException(400, f"ยังค้างโอนเงินให้ช่างคนนี้ {unpaid} รายการ — โอนให้ครบก่อนลบครับ")
+
+    # ลบไฟล์ในห้องนิรภัยจริง ไม่ใช่แค่ตัดลิงก์
+    files = [prov[c] for c in vault.SECRET_COLUMNS if prov[c]] + list(prov["face_scan_urls"] or [])
+    removed = 0
+    for url in files:
+        if vault.is_secure_url(url) and (path := vault.resolve(url.rsplit("/", 1)[-1])):
+            path.unlink(missing_ok=True)
+            removed += 1
+
+    await pool.execute(
+        """UPDATE providers
+              SET active = false, approval_status = 'rejected',
+                  national_id = NULL, full_name = NULL, address = NULL,
+                  id_card_url = NULL, selfie_url = NULL, license_url = NULL,
+                  face_scan_urls = '{}', contract_signature_url = NULL,
+                  contract_version = NULL, contract_signed_at = NULL,
+                  promptpay_id = NULL, bio = NULL,
+                  admin_note = $2
+            WHERE id = $1::uuid""",
+        provider_id, f"ลบข้อมูลช่างโดยแอดมิน: {reason}")
+    await pool.execute("UPDATE users SET phone = NULL, role = 'customer' WHERE id = $1",
+                       prov["user_id"])
+
+    await audit.record("ลบข้อมูลช่าง", "provider", provider_id, prov["display_name"],
+                       reason=reason, ไฟล์ที่ลบ=removed)
+    await notify(prov["line_user_id"],
+                 "ข้อมูลช่างของคุณถูกลบออกจากระบบเอิ้นได้แล้ว\n"
+                 f"เหตุผล: {reason}\n\nหากต้องการกลับมารับงาน สมัครใหม่ได้ครับ")
+    return {"ok": True, "ไฟล์ที่ลบ": removed}
+
+
+@router.get("/audit")
+async def list_audit(limit: int = Query(100, le=500), _: bool = Admin):
+    """ประวัติการแก้ไข/ลบของแอดมิน — ใครแก้อะไรเมื่อไหร่"""
+    rows = await db.get_pool().fetch(
+        "SELECT * FROM admin_audit ORDER BY at DESC LIMIT $1", limit)
+    return [dict(r) | {"at": r["at"].isoformat(), "detail": json.loads(r["detail"])}
+            for r in rows]
+
+
+@router.get("/secure-file/{name}")
+async def admin_secure_file(name: str, _: bool = Admin):
+    """เปิดดูเอกสารยืนยันตัวตนในห้องนิรภัย — เฉพาะแอดมินเท่านั้น"""
+    path = vault.resolve(name)
+    if not path:
+        raise HTTPException(404, "ไม่พบไฟล์นี้")
+    return FileResponse(path)
 
 
 @router.post("/providers/{provider_id}/reject")

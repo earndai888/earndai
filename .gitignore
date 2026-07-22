@@ -9,3 +9,4 @@ __pycache__/
 
 # ไฟล์ผู้ใช้อัปโหลด
 ain-dai-backend/uploads/
+private_uploads/

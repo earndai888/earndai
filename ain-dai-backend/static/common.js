@@ -101,10 +101,12 @@ async function api(path, { method = "GET", body } = {}) {
   return data;
 }
 
-async function uploadFile(file) {
+/* secure=true → เอกสารยืนยันตัวตน เก็บในห้องนิรภัย เปิดดูได้เฉพาะแอดมินกับเจ้าตัว */
+async function uploadFile(file, secure = false) {
   const fd = new FormData();
   fd.append("file", file);
-  const res = await fetch("/api/uploads", { method: "POST", headers: authHeaders(), body: fd });
+  const url = secure ? "/api/uploads?secure=true" : "/api/uploads";
+  const res = await fetch(url, { method: "POST", headers: authHeaders(), body: fd });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.detail || "อัปโหลดไม่สำเร็จ");
   return data.url;

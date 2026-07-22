@@ -174,7 +174,7 @@ async function upDoc(field, boxId, file){
   const label = box.textContent;
   box.textContent = 'กำลังอัปโหลด…';
   try{
-    state.docs[field] = await uploadFile(file);
+    state.docs[field] = await uploadFile(file, true);   // เอกสารบัตร → ห้องนิรภัย
     box.innerHTML = '✅ อัปโหลดแล้ว <span style="font-size:12px">(แตะเพื่อเปลี่ยนรูป)</span>';
     box.style.borderColor = 'var(--green)';
     box.style.background = 'var(--green-pale)';
@@ -281,7 +281,7 @@ async function snapFace(){
   btn.disabled = true; btn.textContent = 'กำลังอัปโหลด…';
   try{
     const blob = await new Promise(r=>c.toBlob(r,'image/jpeg',0.85));
-    const url = await uploadFile(new File([blob], `face${faceStep+1}.jpg`, {type:'image/jpeg'}));
+    const url = await uploadFile(new File([blob], `face${faceStep+1}.jpg`, {type:'image/jpeg'}), true);
     faceUrls.push(url);
     document.getElementById('facethumbs').innerHTML += `<img src="${url}" alt="สแกนใบหน้า">`;
     faceStep++;
@@ -359,7 +359,7 @@ async function uploadSignature(){
   fx.fillStyle = '#fff'; fx.fillRect(0,0,flat.width,flat.height);
   fx.drawImage(c, 0, 0);
   const blob = await new Promise(r=>flat.toBlob(r,'image/png'));
-  return uploadFile(new File([blob], 'signature.png', {type:'image/png'}));
+  return uploadFile(new File([blob], 'signature.png', {type:'image/png'}), true);
 }
 
 /* แถบสถานะใบสมัคร */

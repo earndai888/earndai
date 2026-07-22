@@ -163,6 +163,7 @@ label.f{display:block;font-family:'Mitr';font-size:13.5px;margin:14px 0 6px}
     <div class="grp">ตั้งค่า</div>
     <button class="navitem" data-p="set-groups"><span class="ic">💬</span>กลุ่มไลน์ช่าง</button>
     <button class="navitem" data-p="set-system"><span class="ic">⚙️</span>ตั้งค่าระบบ</button>
+    <button class="navitem" data-p="audit"><span class="ic">📜</span>ประวัติการแก้ไข</button>
 
     <div class="foot"><button onclick="logout()">ออกจากระบบ</button></div>
   </nav>
@@ -249,6 +250,12 @@ label.f{display:block;font-family:'Mitr';font-size:13.5px;margin:14px 0 6px}
         <h2>ลิงก์เข้ากลุ่มแต่ละหมวด</h2>
         <div id="groupLinks"></div>
       </div>
+    </section>
+
+    <section class="page" id="p-audit">
+      <div class="phead"><h1>📜 ประวัติการแก้ไข</h1>
+        <p>ใครแก้หรือลบข้อมูลอะไรไปบ้าง — เก็บไว้ตรวจสอบย้อนหลัง</p></div>
+      <div class="card"><div id="auditList"></div></div>
     </section>
 
     <section class="page" id="p-set-system">
@@ -348,7 +355,7 @@ function nav(p){
   }else{
     ({overview:loadOverview,approve:loadApprove,directory:loadDirectory,finance:loadFinance,
       disputes:loadDisputes,reports:()=>{}, 'set-groups':loadGroupLinks,
-      'set-system':loadSystem})[p]();
+      'set-system':loadSystem, audit:loadAudit})[p]();
   }
 }
 
@@ -475,22 +482,39 @@ function openDrawer(id){
     <label class="f">ที่อยู่ตามบัตร <span class="muted">(ใช้ออกใบ 50 ทวิ)</span></label>
     <input type="text" id="dAddr" style="width:100%" maxlength="300"
            placeholder="บ้านเลขที่ หมู่ ตำบล อำเภอ จังหวัด" value="${esc(p.address||'')}">
+    <label class="f">ชื่อที่ลูกค้าเห็น</label>
+    <input type="text" id="dDisplay" style="width:100%" maxlength="60" value="${esc(p.display_name||'')}">
+    <label class="f">เบอร์โทรศัพท์</label>
+    <input type="text" id="dPhone" style="width:100%" maxlength="20" value="${esc(p.phone||'')}">
+    <label class="f">ชื่อ-นามสกุลจริง <span class="muted">(ใช้ออกใบ 50 ทวิ)</span></label>
+    <input type="text" id="dFullName" style="width:100%" maxlength="120" value="${esc(p.full_name||'')}">
+    <label class="f">เบอร์พร้อมเพย์รับเงิน</label>
+    <input type="text" id="dPromptpay" style="width:100%" maxlength="20" value="${esc(p.promptpay_id||'')}">
+    <label class="f">คำแนะนำตัว <span class="muted">(ลูกค้าเห็น)</span></label>
+    <textarea id="dBio" maxlength="300">${esc(p.bio||'')}</textarea>
+
     <label class="f">บันทึกแอดมิน / เหตุผล</label>
-    <textarea id="dNote" placeholder="ระบุเหตุผลเมื่อขอเอกสารเพิ่มหรือปฏิเสธ">${esc(p.admin_note||'')}</textarea>
+    <textarea id="dNote" placeholder="ระบุเหตุผลเมื่อแก้ข้อมูล ขอเอกสารเพิ่ม ปฏิเสธ หรือลบ">${esc(p.admin_note||'')}</textarea>
     <div class="row" style="margin-top:16px">
       <button class="btn" onclick="doApprove()">🟢 อนุมัติ</button>
+      <button class="btn navy" onclick="doEdit()">💾 บันทึกการแก้ไข</button>
       <button class="btn warn" onclick="doAction('request-info')">🟠 ขอเอกสารเพิ่ม</button>
       <button class="btn danger" onclick="doAction('reject')">🔴 ปฏิเสธ</button>
     </div>
-    <div class="muted" style="margin-top:10px">ระบบจะแจ้งผลให้ช่างทาง LINE อัตโนมัติ</div>`;
+    <div class="row">
+      <button class="btn danger" onclick="doDelete()">🗑 ลบข้อมูลช่างถาวร</button>
+    </div>
+    <div class="muted" style="margin-top:10px">ระบบจะแจ้งผลให้ช่างทาง LINE อัตโนมัติ ·
+      ทุกการแก้ไขและลบถูกบันทึกไว้ที่เมนู "ประวัติการแก้ไข"</div>`;
   document.getElementById('dTier').value = p.tier || 1;
   document.getElementById('drawer').classList.add('on');
+  loadSecureImages(document.getElementById('drawerBody'));
 }
 function docImgs(p){
   const items = [[p.id_card_url,'บัตรประชาชน'],[p.selfie_url,'เซลฟี่คู่บัตร'],[p.license_url,'ใบขับขี่/ทะเบียนรถ']];
   const out = items.filter(([u])=>u).map(([u,lb])=>
     `<div style="display:inline-block;text-align:center">
-       <img src="${esc(u)}" onclick="this.classList.toggle('zoom')" alt="${lb}">
+       <img data-secure="${esc(u)}" onclick="this.classList.toggle('zoom')" alt="${lb}">
        <div class="muted" style="font-size:12px">${lb}</div></div>`).join('');
   return out || '<span class="chip danger">ช่างยังไม่ได้อัปโหลดเอกสาร — ควรกด "ขอเอกสารเพิ่ม"</span>';
 }
@@ -498,16 +522,31 @@ function faceImgs(p){
   const urls = p.face_scan_urls || [];
   return urls.length
     ? urls.map((u,i)=>`<div style="display:inline-block;text-align:center">
-         <img src="${esc(u)}" onclick="this.classList.toggle('zoom')" alt="สแกนใบหน้า ${i+1}">
+         <img data-secure="${esc(u)}" onclick="this.classList.toggle('zoom')" alt="สแกนใบหน้า ${i+1}">
          <div class="muted" style="font-size:12px">ท่าที่ ${i+1}</div></div>`).join('')
     : '<span class="chip danger">ยังไม่มีรูปสแกนใบหน้า</span>';
 }
 function contractBlock(p){
   if(!p.contract_signature_url) return '<span class="chip danger">ยังไม่ได้เซ็นหนังสือสัญญา</span>';
   return `<div style="display:inline-block;text-align:center">
-      <img src="${esc(p.contract_signature_url)}" onclick="this.classList.toggle('zoom')" alt="ลายเซ็น">
+      <img data-secure="${esc(p.contract_signature_url)}" onclick="this.classList.toggle('zoom')" alt="ลายเซ็น">
       <div class="muted" style="font-size:12px">เซ็นเมื่อ ${dt(p.contract_signed_at)} · ฉบับ ${esc(p.contract_version||'-')}</div>
     </div>`;
+}
+/* เอกสารลับอยู่ในห้องนิรภัย ต้องยื่น token ทาง header — ใส่ token ใน url ไม่ได้
+   เพราะจะติดไปกับ log และประวัติเบราว์เซอร์ */
+async function loadSecureImages(root){
+  for(const img of root.querySelectorAll('img[data-secure]')){
+    const src = img.dataset.secure.replace('/api/secure-file/','/api/admin/secure-file/');
+    try{
+      const res = await fetch(src, {headers:{'X-Admin-Token':TOKEN}});
+      if(!res.ok) throw new Error(res.status);
+      img.src = URL.createObjectURL(await res.blob());
+    }catch(e){
+      img.replaceWith(Object.assign(document.createElement('span'),
+        {className:'chip danger', textContent:'เปิดไฟล์ไม่ได้'}));
+    }
+  }
 }
 function closeDrawer(){document.getElementById('drawer').classList.remove('on')}
 async function doApprove(){
@@ -526,6 +565,43 @@ async function doApprove(){
          '\n(ยังไม่ได้ตั้งลิงก์กลุ่ม OpenChat — ตั้งได้ที่เมนู ตั้งค่าระบบ)'));
   loadApprove(); loadOverview();
 }
+async function doEdit(){
+  const reason = document.getElementById('dNote').value.trim();
+  if(reason.length < 3) return alert('ระบุเหตุผลที่แก้ในช่องบันทึกแอดมินก่อนครับ (อย่างน้อย 3 ตัวอักษร)');
+  const v = id => document.getElementById(id).value.trim();
+  const body = {reason,
+    display_name: v('dDisplay') || null, phone: v('dPhone') || null,
+    full_name: v('dFullName') || null, national_id: v('dNid') || null,
+    address: v('dAddr') || null, promptpay_id: v('dPromptpay') || null, bio: v('dBio') || null,
+    tier: +document.getElementById('dTier').value,
+    skill_tags: v('dTags').split(',').map(s=>s.trim()).filter(Boolean)};
+  const cats = [...document.querySelectorAll('#dCats .chip.sel')].map(c=>c.dataset.slug);
+  if(cats.length) body.category_slugs = cats;
+  try{
+    const r = await api(`/providers/${CURRENT.id}`,{method:'PATCH',body});
+    alert('บันทึกแล้ว: ' + r.changed.join(', '));
+    closeDrawer(); loadApprove(); loadDirectory();
+  }catch(e){ alert('แก้ไม่สำเร็จ: '+e.message); }
+}
+
+async function doDelete(){
+  const reason = document.getElementById('dNote').value.trim();
+  if(reason.length < 3) return alert('ระบุเหตุผลที่ลบในช่องบันทึกแอดมินก่อนครับ');
+  const name = CURRENT.display_name || 'ช่างคนนี้';
+  const คำเตือน = [
+    `ลบข้อมูลช่าง "${name}" ถาวร?`, '',
+    'จะลบ: เลขบัตร ชื่อจริง ที่อยู่ รูปบัตร รูปสแกนหน้า ลายเซ็น พร้อมเพย์ (ลบไฟล์จริงด้วย)',
+    'จะเก็บไว้: ประวัติงานและรายการเงิน (ลบไม่ได้ ต้องใช้ยืนยันภาษีย้อนหลัง)', '',
+    'กู้คืนไม่ได้ — ช่างต้องสมัครใหม่',
+  ].join('\n');
+  if(!confirm(คำเตือน)) return;
+  try{
+    const r = await api(`/providers/${CURRENT.id}?reason=${encodeURIComponent(reason)}`,{method:'DELETE'});
+    alert(`ลบข้อมูลช่างแล้ว (ลบไฟล์ในห้องนิรภัย ${r['ไฟล์ที่ลบ']} ไฟล์)`);
+    closeDrawer(); loadApprove(); loadDirectory(); loadOverview();
+  }catch(e){ alert('ลบไม่สำเร็จ: '+e.message); }
+}
+
 async function doAction(kind){
   const reason = document.getElementById('dNote').value.trim();
   if(!reason) return alert('ระบุเหตุผลในช่องบันทึกแอดมินก่อนครับ');
@@ -534,6 +610,21 @@ async function doAction(kind){
 }
 
 /* ── ทะเบียนช่าง ── */
+async function loadAudit(){
+  const rows = await api('/audit');
+  const พูดไทย = {'แก้ข้อมูลช่าง':'chip','ลบข้อมูลช่าง':'chip danger'};
+  document.getElementById('auditList').innerHTML = rows.length ? table(
+    ['เมื่อไหร่','ทำอะไร','กับใคร','รายละเอียด'],
+    rows.map(r=>[
+      dt(r.at),
+      `<span class="${พูดไทย[r.action]||'chip gray'}">${esc(r.action)}</span>`,
+      esc(r.target_name||r.target_id||'-'),
+      Object.entries(r.detail||{}).map(([k,v])=>
+        `<div><span class="muted">${esc(k)}:</span> ${esc(Array.isArray(v)?v.join(', '):String(v))}</div>`
+      ).join('') || '<span class="muted">-</span>',
+    ])) : '<div class="muted">ยังไม่มีการแก้ไขข้อมูล</div>';
+}
+
 async function loadDirectory(){
   const qs = new URLSearchParams({status:document.getElementById('fStatus').value});
   const c = document.getElementById('fCat').value, t = document.getElementById('fTambon').value,
