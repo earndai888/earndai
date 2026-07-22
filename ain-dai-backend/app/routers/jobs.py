@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 
-from .. import db, flex, line_api, promptpay
+from .. import contract, db, flex, line_api, promptpay, thai_id
 from ..config import settings
 from ..intent import CATEGORY_NAMES, subcategories_of
 from ..settlement import FeeConfig, compute_split
@@ -108,6 +108,14 @@ async def me(user: dict = Depends(current_user)):
             "bio": prov["bio"], "promptpay_id": prov["promptpay_id"],
             "category_slugs": prov["category_slugs"] or [],
             "subcategory_slugs": prov["subcategory_slugs"] or [],
+            "full_name": prov["full_name"],
+            # ไม่ส่งเลขบัตรเต็มกลับ — โชว์แค่ให้รู้ว่ากรอกไว้แล้ว
+            "national_id_masked": thai_id.mask_id(prov["national_id"] or ""),
+            "face_scan_count": len(prov["face_scan_urls"] or []),
+            "contract_signed": bool(prov["contract_signature_url"]),
+            # สัญญามีเวอร์ชันใหม่ → ต้องเซ็นใหม่ก่อนรับงานต่อ
+            "contract_outdated": bool(prov["contract_signature_url"])
+                                 and prov["contract_version"] != contract.CONTRACT_VERSION,
             "tambon_coverage": prov["tambon_coverage"],
             "rating_avg": prov["rating_avg"], "rating_count": prov["rating_count"],
             "jobs_done": prov["jobs_done"], "verified": prov["verified"],
@@ -122,7 +130,14 @@ async def me(user: dict = Depends(current_user)):
 
 class ProviderRegisterIn(BaseModel):
     display_name: str = Field(min_length=2, max_length=60)
-    phone: str | None = Field(default=None, max_length=20)
+    # ── ยืนยันตัวตน (บังคับ) ──
+    full_name: str = Field(min_length=4, max_length=120)     # ชื่อ-นามสกุลจริงตามบัตร
+    national_id: str = Field(min_length=13, max_length=20)   # เลขบัตรประชาชน 13 หลัก
+    phone: str = Field(min_length=9, max_length=20)
+    # สแกนใบหน้า + ลายเซ็นสัญญา — เว้นว่างได้เฉพาะตอนแก้โปรไฟล์ (ใช้ของเดิมที่เก็บไว้)
+    face_scan_urls: list[str] = []
+    contract_signature_url: str | None = None
+    contract_version: str | None = None
     bio: str | None = Field(default=None, max_length=300)
     promptpay_id: str | None = Field(default=None, max_length=20)
     category_slugs: list[str] = Field(min_length=1)
@@ -135,9 +150,63 @@ class ProviderRegisterIn(BaseModel):
     license_url: str | None = None
 
 
+@router.get("/provider/contract")
+async def provider_contract():
+    """หนังสือสัญญาที่ช่างต้องอ่านและเซ็นก่อนรับงาน"""
+    return contract.payload()
+
+
+def _check_identity(body: ProviderRegisterIn, existing: dict | None) -> dict:
+    """ตรวจข้อมูลยืนยันตัวตน → คืนค่าที่ล้างแล้วพร้อมบันทึก
+    แก้โปรไฟล์โดยไม่สแกนหน้า/เซ็นใหม่ได้ ถ้าเคยทำไว้แล้วและสัญญายังเวอร์ชันเดิม"""
+    if not thai_id.valid_full_name(body.full_name):
+        raise HTTPException(400, "กรอกทั้งชื่อและนามสกุลจริงตามบัตรประชาชนครับ")
+    if not thai_id.valid_national_id(body.national_id):
+        raise HTTPException(400, "เลขบัตรประชาชนไม่ถูกต้อง ลองตรวจดูอีกทีครับ")
+    phone = thai_id.normalize_phone(body.phone)
+    if not phone:
+        raise HTTPException(400, "เบอร์โทรศัพท์ไม่ถูกต้องครับ")
+
+    # url ต้องเป็นไฟล์ที่อัปโหลดผ่าน /api/uploads เท่านั้น กันยิง url ภายนอกเข้ามา
+    urls = [*body.face_scan_urls] + ([body.contract_signature_url] if body.contract_signature_url else [])
+    if any(not u.startswith("/uploads/") for u in urls):
+        raise HTTPException(400, "ไฟล์แนบไม่ถูกต้อง กรุณาถ่าย/เซ็นใหม่ครับ")
+
+    faces = body.face_scan_urls or (existing["face_scan_urls"] if existing else [])
+    if not faces:
+        raise HTTPException(400, "กรุณาสแกนใบหน้าก่อนส่งใบสมัครครับ")
+
+    signature = body.contract_signature_url
+    version = body.contract_version
+    if signature:
+        if version != contract.CONTRACT_VERSION:
+            raise HTTPException(400, "หนังสือสัญญามีการปรับปรุง กรุณาโหลดหน้าใหม่แล้วเซ็นอีกครั้งครับ")
+    else:
+        signature = existing["contract_signature_url"] if existing else None
+        version = existing["contract_version"] if existing else None
+        if not signature:
+            raise HTTPException(400, "กรุณาเซ็นรับหนังสือสัญญาก่อนส่งใบสมัครครับ")
+        if version != contract.CONTRACT_VERSION:
+            raise HTTPException(400, "หนังสือสัญญามีการปรับปรุง กรุณาอ่านและเซ็นใหม่ครับ")
+
+    return {"national_id": thai_id.normalize_id(body.national_id), "phone": phone,
+            "faces": faces, "signature": signature, "version": version}
+
+
 @router.post("/provider/register", status_code=201)
 async def provider_register(body: ProviderRegisterIn, user: dict = Depends(current_user)):
     pool = db.get_pool()
+    existing = await pool.fetchrow(
+        """SELECT face_scan_urls, contract_signature_url, contract_version
+             FROM providers WHERE user_id = $1""", user["id"])
+    ident = _check_identity(body, dict(existing) if existing else None)
+    national_id = ident["national_id"]
+    # เลขบัตรใบเดียวสมัครได้คนเดียว — กันสวมรอย/สมัครซ้ำหลายบัญชี LINE
+    dup = await pool.fetchval(
+        "SELECT count(*) FROM providers WHERE national_id = $1 AND user_id <> $2",
+        national_id, user["id"])
+    if dup:
+        raise HTTPException(400, "เลขบัตรนี้มีผู้สมัครไว้แล้ว หากเป็นของพี่จริงกรุณาติดต่อแอดมินครับ")
     cat_rows = await pool.fetch(
         "SELECT id FROM service_categories WHERE slug = ANY($1::text[]) AND active",
         list(set(body.category_slugs)))
@@ -159,23 +228,29 @@ async def provider_register(body: ProviderRegisterIn, user: dict = Depends(curre
     row = await pool.fetchrow(
         """INSERT INTO providers (user_id, categories, tambon_coverage, bio, promptpay_id,
                                   id_card_url, selfie_url, license_url, subcategories,
+                                  full_name, national_id, face_scan_urls,
+                                  contract_signature_url, contract_version, contract_signed_at,
                                   approval_status, active)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending',false)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,now(),'pending',false)
            ON CONFLICT (user_id) DO UPDATE
              SET categories = $2, tambon_coverage = $3, bio = $4, promptpay_id = $5,
                  id_card_url = COALESCE($6, providers.id_card_url),
                  selfie_url  = COALESCE($7, providers.selfie_url),
                  license_url = COALESCE($8, providers.license_url),
                  subcategories = $9,
+                 full_name = $10, national_id = $11, face_scan_urls = $12,
+                 contract_signature_url = $13, contract_version = $14, contract_signed_at = now(),
                  approval_status = CASE WHEN providers.approval_status = 'approved'
                                         THEN 'approved' ELSE 'pending' END
            RETURNING approval_status""",
         user["id"], [r["id"] for r in cat_rows], tambon_ids,
         body.bio, body.promptpay_id, body.id_card_url, body.selfie_url, body.license_url,
-        [r["id"] for r in sub_rows])
+        [r["id"] for r in sub_rows],
+        body.full_name.strip(), national_id, ident["faces"],
+        ident["signature"], ident["version"])
     await pool.execute(
         "UPDATE users SET display_name = $2, phone = $3, role = 'provider' WHERE id = $1",
-        user["id"], body.display_name, body.phone)
+        user["id"], body.display_name, ident["phone"])
     return {"ok": True, "approval_status": row["approval_status"]}
 
 

@@ -21,10 +21,19 @@
     <h1 id="preghead">สมัครเป็นช่างกับเอิ้นได้</h1>
     <p>รับงานใกล้บ้าน เลือกงานเองได้ เงินเข้าแน่นอนผ่านระบบ escrow</p>
   </div>
+  <div class="sect"><h2>1. ข้อมูลตัวจริง</h2></div>
+  <label class="f">ชื่อ-นามสกุลจริง (ตามบัตรประชาชน) *</label>
+  <input class="inp" id="rfullname" placeholder="เช่น สมชาย ใจดี" maxlength="120" autocomplete="name">
+  <label class="f">เลขบัตรประชาชน 13 หลัก *</label>
+  <input class="inp" id="rnid" placeholder="x-xxxx-xxxxx-xx-x" inputmode="numeric" maxlength="20"
+         oninput="fmtNid(this)">
+  <div class="note" id="rnidhint" style="margin:-4px 18px 10px">ใช้ยืนยันตัวตนและออกใบหักภาษี 50 ทวิ — ลูกค้าไม่เห็นเลขนี้</div>
+  <label class="f">เบอร์โทรศัพท์ *</label>
+  <input class="inp" id="rphone" placeholder="08xxxxxxxx" inputmode="tel" maxlength="20" autocomplete="tel">
+
+  <div class="sect"><h2>2. ข้อมูลที่ลูกค้าเห็น</h2></div>
   <label class="f">ชื่อที่แสดงให้ลูกค้าเห็น *</label>
   <input class="inp" id="rname" placeholder="เช่น ช่างเอก รับเหมาไฟฟ้า" maxlength="60">
-  <label class="f">เบอร์โทรศัพท์</label>
-  <input class="inp" id="rphone" placeholder="08xxxxxxxx" inputmode="tel" maxlength="20">
   <label class="f">รับงานหมวดไหนบ้าง * (เลือกได้หลายหมวด)</label>
   <div class="chips" id="rcats"></div>
   <!-- งานด่วน 24 ชม. — ช่างรถไถกับช่างกุญแจคนละคน ต้องระบุว่ารับงานแบบไหน -->
@@ -40,13 +49,30 @@
   <label class="f">เบอร์ PromptPay รับเงินค่าจ้าง</label>
   <input class="inp" id="rpromptpay" placeholder="เบอร์มือถือหรือเลขบัตรประชาชน" maxlength="20">
 
-  <label class="f">เอกสารยืนยันตัวตน (แอดมินตรวจก่อนอนุมัติ)</label>
+  <div class="sect"><h2>3. เอกสารยืนยันตัวตน</h2></div>
   <div class="photo" onclick="document.getElementById('idcard').click()" id="idcardbox">🪪 รูปบัตรประชาชน</div>
   <input type="file" id="idcard" accept="image/*" style="display:none" onchange="upDoc('id_card_url','idcardbox',this.files[0])">
   <div class="photo" onclick="document.getElementById('selfie').click()" id="selfiebox">🤳 รูปถ่ายคู่กับบัตรประชาชน</div>
   <input type="file" id="selfie" accept="image/*" style="display:none" onchange="upDoc('selfie_url','selfiebox',this.files[0])">
   <div class="photo" onclick="document.getElementById('license').click()" id="licensebox">🚗 ใบขับขี่/ทะเบียนรถ (เฉพาะงานด่วน)</div>
   <input type="file" id="license" accept="image/*" style="display:none" onchange="upDoc('license_url','licensebox',this.files[0])">
+
+  <div class="sect"><h2>4. สแกนใบหน้า *</h2></div>
+  <div class="photo" id="facebox" onclick="openFaceScan()">📷 แตะเพื่อสแกนใบหน้า</div>
+  <div class="note" style="margin:-4px 18px 10px">ถ่ายสดจากกล้องหน้าเท่านั้น (เลือกรูปจากคลังไม่ได้)
+    แอดมินจะเทียบกับรูปบัตรก่อนอนุมัติ</div>
+  <div id="facethumbs" class="thumbs"></div>
+
+  <div class="sect"><h2>5. หนังสือสัญญา *</h2></div>
+  <div class="contract" id="contractbox">กำลังโหลดหนังสือสัญญา…</div>
+  <label class="chk"><input type="checkbox" id="ragree">
+    <span>ข้าพเจ้าได้อ่านและยอมรับหนังสือสัญญาข้างต้นทั้งหมด</span></label>
+  <label class="f">เซ็นชื่อด้วยนิ้วในกรอบด้านล่าง *</label>
+  <div class="signwrap">
+    <canvas id="signpad" width="600" height="220"></canvas>
+    <div class="signline">ลงชื่อ</div>
+  </div>
+  <button class="btn ghost" type="button" onclick="clearSign()">ล้างลายเซ็น เซ็นใหม่</button>
 
   <button class="btn" id="regbtn" onclick="register()">ส่งใบสมัคร</button>
   <div class="note">แอดมินจะตรวจเอกสารและแจ้งผลทาง LINE ภายใน 1-2 วัน<br>
@@ -79,6 +105,20 @@
   <button onclick="editProfile()">👤<span class="navlbl">ข้อมูลช่าง</span></button>
 </nav>
 
+<!-- ═══ สแกนใบหน้า (กล้องสด) ═══ -->
+<div class="facemodal" id="facemodal">
+  <div class="facehead" id="facestep">จัดใบหน้าให้อยู่ในกรอบ</div>
+  <div class="facestage">
+    <video id="facevideo" playsinline autoplay muted></video>
+    <div class="facering"></div>
+  </div>
+  <div class="facehint" id="facehint">แตะปุ่มถ่ายเมื่อพร้อม</div>
+  <div class="faceactions">
+    <button class="btn ghost" onclick="closeFaceScan()">ยกเลิก</button>
+    <button class="btn" id="facesnap" onclick="snapFace()">ถ่ายรูป</button>
+  </div>
+</div>
+
 <script src="/static/common.js"></script>
 <script>
 const state = {me:null, jobId:null, docs:{}};
@@ -95,6 +135,8 @@ const short = n => ({'ตัดหญ้า-จัดสวน':'ตัดหญ
     `<button class="chip" data-slug="${s.slug}" data-cat="${s.category_slug}" onclick="this.classList.toggle('on')" title="${esc((s.examples||[]).join(' / '))}">${s.icon||''} ${esc(s.name_th)}</button>`).join('');
   document.getElementById('rtambons').innerHTML = META.tambons.map(t=>
     `<button class="chip" data-id="${t.id}" onclick="this.classList.toggle('on')">ต.${esc(t.name)}</button>`).join('');
+  initSignPad();
+  loadContract();
   await refreshMe();
   const jobParam = new URLSearchParams(location.search).get('job');
   if(state.me.is_provider){
@@ -122,6 +164,152 @@ async function upDoc(field, boxId, file){
     box.style.borderColor = 'var(--green)';
     box.style.background = 'var(--green-pale)';
   }catch(e){ box.textContent = label; alert('อัปโหลดไม่สำเร็จ: '+e.message); }
+}
+
+/* ── เลขบัตรประชาชน: ใส่ขีดให้อัตโนมัติ + ตรวจหลักตรวจสอบทันที ── */
+function nidDigits(){ return document.getElementById('rnid').value.replace(/\D/g,''); }
+function fmtNid(el){
+  const d = el.value.replace(/\D/g,'').slice(0,13);
+  const p = [d.slice(0,1), d.slice(1,5), d.slice(5,10), d.slice(10,12), d.slice(12,13)].filter(Boolean);
+  el.value = p.join('-');
+  const hint = document.getElementById('rnidhint');
+  if(d.length < 13){
+    hint.textContent = 'ใช้ยืนยันตัวตนและออกใบหักภาษี 50 ทวิ — ลูกค้าไม่เห็นเลขนี้';
+    hint.style.color = '';
+  }else{
+    const ok = validNid(d);
+    hint.textContent = ok ? '✅ เลขบัตรถูกต้อง' : '⚠️ เลขบัตรไม่ถูกต้อง ลองตรวจดูอีกทีครับ';
+    hint.style.color = ok ? 'var(--green-dark)' : '#D64545';
+  }
+}
+/* หลักตรวจสอบเลขบัตร ปชช. ไทย (mod 11) — ตรงกับที่ตรวจซ้ำฝั่งเซิร์ฟเวอร์ */
+function validNid(d){
+  if(!/^[1-9]\d{12}$/.test(d)) return false;
+  let sum = 0;
+  for(let i=0;i<12;i++) sum += +d[i] * (13-i);
+  return (11 - sum%11) % 10 === +d[12];
+}
+
+/* ── สแกนใบหน้า: ถ่ายสดจากกล้องหน้า 3 ท่า ── */
+const FACE_STEPS = [
+  {head:'ท่าที่ 1 — มองตรงกล้อง',   hint:'ถอดหมวก แว่นตาดำ และหน้ากากออกก่อนนะครับ'},
+  {head:'ท่าที่ 2 — หันหน้าไปทางซ้ายเล็กน้อย', hint:'หันช้าๆ ให้เห็นข้างแก้ม'},
+  {head:'ท่าที่ 3 — ยิ้มให้กล้อง',   hint:'อีกรูปเดียวเสร็จแล้วครับ'},
+];
+let faceStream = null, faceStep = 0, faceUrls = [];
+
+async function openFaceScan(){
+  faceStep = 0; faceUrls = [];
+  document.getElementById('facethumbs').innerHTML = '';
+  try{
+    faceStream = await navigator.mediaDevices.getUserMedia({video:{facingMode:'user', width:{ideal:720}}});
+  }catch(e){
+    return alert('เปิดกล้องไม่ได้: ' + e.message + '\nกรุณาอนุญาตให้ใช้กล้องแล้วลองใหม่ครับ');
+  }
+  document.getElementById('facevideo').srcObject = faceStream;
+  document.getElementById('facemodal').classList.add('on');
+  renderFaceStep();
+}
+function renderFaceStep(){
+  const s = FACE_STEPS[faceStep];
+  document.getElementById('facestep').textContent = s.head;
+  document.getElementById('facehint').textContent = s.hint;
+  document.getElementById('facesnap').textContent = `ถ่ายรูป (${faceStep+1}/${FACE_STEPS.length})`;
+}
+function closeFaceScan(){
+  if(faceStream) faceStream.getTracks().forEach(t=>t.stop());
+  faceStream = null;
+  document.getElementById('facemodal').classList.remove('on');
+}
+async function snapFace(){
+  const v = document.getElementById('facevideo'), btn = document.getElementById('facesnap');
+  if(!v.videoWidth) return alert('กล้องยังไม่พร้อม รออีกครู่นะครับ');
+  const side = Math.min(v.videoWidth, v.videoHeight);
+  const c = document.createElement('canvas');
+  c.width = c.height = side;
+  c.getContext('2d').drawImage(v, (v.videoWidth-side)/2, (v.videoHeight-side)/2, side, side, 0, 0, side, side);
+  btn.disabled = true; btn.textContent = 'กำลังอัปโหลด…';
+  try{
+    const blob = await new Promise(r=>c.toBlob(r,'image/jpeg',0.85));
+    const url = await uploadFile(new File([blob], `face${faceStep+1}.jpg`, {type:'image/jpeg'}));
+    faceUrls.push(url);
+    document.getElementById('facethumbs').innerHTML += `<img src="${url}" alt="สแกนใบหน้า">`;
+    faceStep++;
+    if(faceStep >= FACE_STEPS.length){ closeFaceScan(); markFaceDone(); }
+    else renderFaceStep();
+  }catch(e){ alert('อัปโหลดไม่สำเร็จ: '+e.message); }
+  finally{ btn.disabled = false; if(faceStream) renderFaceStep(); }
+}
+function markFaceDone(){
+  const box = document.getElementById('facebox');
+  box.innerHTML = `✅ สแกนใบหน้าแล้ว ${faceUrls.length} รูป <span style="font-size:12px">(แตะเพื่อสแกนใหม่)</span>`;
+  box.style.borderColor = 'var(--green)';
+  box.style.borderStyle = 'solid';
+  box.style.background = 'var(--green-pale)';
+}
+
+/* ── หนังสือสัญญา + ลายเซ็น ── */
+let contractVersion = null, signed = false;
+
+async function loadContract(){
+  try{
+    const c = await api('/provider/contract');
+    contractVersion = c.version;
+    const box = document.getElementById('contractbox');
+    box.textContent = c.text;
+    box.insertAdjacentHTML('afterbegin', `<h3>${esc(c.title)}</h3>`);
+  }catch(e){
+    document.getElementById('contractbox').textContent = 'โหลดหนังสือสัญญาไม่สำเร็จ กรุณาลองใหม่';
+  }
+}
+
+function initSignPad(){
+  const c = document.getElementById('signpad'), ctx = c.getContext('2d');
+  /* ตอน boot หน้าสมัครยังถูกซ่อนอยู่ ขนาดกรอบจึงเป็น 0 → ต้องวัดใหม่ตอนหน้าโผล่
+     ไม่งั้นเซ็นแล้วได้ไฟล์เปล่า (ResizeObserver ยิงให้เองเมื่อกรอบมีขนาดจริง) */
+  const fit = () => {
+    const r = c.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    if(!r.width || !r.height) return;
+    const w = Math.round(r.width * dpr), h = Math.round(r.height * dpr);
+    if(c.width === w && c.height === h) return;
+    const old = signed ? c.toDataURL() : null;   // เปลี่ยนขนาด = ล้างภาพ ต้องเก็บลายเซ็นเดิมไว้
+    c.width = w; c.height = h;
+    ctx.setTransform(1,0,0,1,0,0); ctx.scale(dpr, dpr);
+    ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#1E3A5F';
+    if(old){ const img = new Image(); img.onload = () => ctx.drawImage(img, 0, 0, r.width, r.height); img.src = old; }
+  };
+  fit();
+  new ResizeObserver(fit).observe(c);
+  let drawing = false;
+  const pos = e => { const r = c.getBoundingClientRect(); return [e.clientX-r.left, e.clientY-r.top]; };
+  c.addEventListener('pointerdown', e=>{
+    drawing = true; c.setPointerCapture(e.pointerId);
+    ctx.beginPath(); ctx.moveTo(...pos(e));
+  });
+  c.addEventListener('pointermove', e=>{
+    if(!drawing) return;
+    ctx.lineTo(...pos(e)); ctx.stroke();
+    if(!signed){ signed = true; c.parentElement.classList.add('signed'); }
+  });
+  ['pointerup','pointercancel','pointerleave'].forEach(ev=>c.addEventListener(ev,()=>drawing=false));
+}
+function clearSign(){
+  const c = document.getElementById('signpad');
+  c.getContext('2d').clearRect(0,0,c.width,c.height);
+  signed = false;
+  c.parentElement.classList.remove('signed');
+}
+async function uploadSignature(){
+  const c = document.getElementById('signpad');
+  if(!c.width || !c.height) throw new Error('ช่องเซ็นยังไม่พร้อม ลองเลื่อนหน้าจอแล้วเซ็นใหม่ครับ');
+  // เซ็นบนพื้นโปร่งใส → วางบนพื้นขาวก่อน ไม่งั้นลายเซ็นดำบนพื้นดำตอนแอดมินเปิดดู
+  const flat = document.createElement('canvas');
+  flat.width = c.width; flat.height = c.height;
+  const fx = flat.getContext('2d');
+  fx.fillStyle = '#fff'; fx.fillRect(0,0,flat.width,flat.height);
+  fx.drawImage(c, 0, 0);
+  const blob = await new Promise(r=>flat.toBlob(r,'image/png'));
+  return uploadFile(new File([blob], 'signature.png', {type:'image/png'}));
 }
 
 /* แถบสถานะใบสมัคร */
@@ -159,12 +347,32 @@ function prefillRegister(){
     const div = document.createElement('div');
     div.id = 'appbanner'; div.innerHTML = html;
     const sec = document.getElementById('preg');
-    sec.insertBefore(div, sec.querySelector('label.f'));
+    sec.insertBefore(div, sec.querySelector('.sect'));
   }
   if(p){
     if(p.id_card_url) markDoc('idcardbox');
     if(p.selfie_url)  markDoc('selfiebox');
     if(p.license_url) markDoc('licensebox');
+    document.getElementById('rfullname').value = p.full_name || '';
+    if(p.national_id_masked){
+      const nid = document.getElementById('rnid');
+      nid.placeholder = p.national_id_masked + ' (กรอกใหม่เพื่อเปลี่ยน)';
+    }
+    if(p.face_scan_count){
+      const box = document.getElementById('facebox');
+      box.innerHTML = `✅ สแกนใบหน้าไว้แล้ว ${p.face_scan_count} รูป <span style="font-size:12px">(แตะเพื่อสแกนใหม่)</span>`;
+      box.style.borderColor = 'var(--green)'; box.style.borderStyle = 'solid';
+      box.style.background = 'var(--green-pale)';
+    }
+    // เคยเซ็นแล้วและสัญญายังเป็นเวอร์ชันเดิม → ไม่ต้องเซ็นซ้ำตอนแก้โปรไฟล์
+    if(p.contract_signed && !p.contract_outdated){
+      document.getElementById('ragree').checked = true;
+      document.getElementById('contractbox').insertAdjacentHTML('beforebegin',
+        '<div class="escrow" style="margin:10px 18px">✅ <span>เซ็นรับหนังสือสัญญาไว้แล้ว — เซ็นใหม่เฉพาะเมื่อต้องการเปลี่ยนลายเซ็น</span></div>');
+    }else if(p.contract_outdated){
+      document.getElementById('contractbox').insertAdjacentHTML('beforebegin',
+        '<div class="escrow warn" style="margin:10px 18px">📄 <span><b>หนังสือสัญญามีการปรับปรุง</b><br>กรุณาอ่านและเซ็นใหม่ก่อนรับงานต่อครับ</span></div>');
+    }
   }
   document.getElementById('rname').value = me.display_name === 'ผู้ใช้ใหม่' ? '' : me.display_name;
   document.getElementById('rphone').value = me.phone || '';
@@ -202,27 +410,48 @@ function markDoc(boxId){
 function editProfile(){ prefillRegister(); go('preg'); }
 
 async function register(){
+  const p = state.me.provider;
   const name = document.getElementById('rname').value.trim();
+  const fullName = document.getElementById('rfullname').value.trim();
+  const nid = nidDigits();
+  const phone = document.getElementById('rphone').value.trim();
   const cats = [...document.querySelectorAll('#rcats .chip.on')].map(c=>c.dataset.slug);
   const subs = [...document.querySelectorAll('#rsubs .chip.on')].map(c=>c.dataset.slug);
   const tams = [...document.querySelectorAll('#rtambons .chip.on')].map(c=>+c.dataset.id);
+
+  if(fullName.split(/\s+/).filter(w=>w.length>=2).length < 2)
+    return alert('กรอกทั้งชื่อและนามสกุลจริงตามบัตรประชาชนครับ');
+  if(!validNid(nid)) return alert('เลขบัตรประชาชนไม่ถูกต้อง ลองตรวจดูอีกทีครับ');
+  if(phone.replace(/\D/g,'').length < 9) return alert('กรอกเบอร์โทรศัพท์ให้ถูกต้องครับ');
   if(name.length < 2) return alert('ใส่ชื่อที่แสดงให้ลูกค้าเห็นก่อนครับ');
   if(!cats.length) return alert('เลือกหมวดงานที่รับอย่างน้อย 1 หมวดครับ');
   if(document.getElementById('rsubbox').style.display !== 'none' && !subs.length)
     return alert('เลือกด้วยครับว่ารับงานด่วนแบบไหนบ้าง');
   if(!tams.length) return alert('เลือกตำบลที่รับงานอย่างน้อย 1 ตำบลครับ');
+  // สแกนหน้า/เซ็นสัญญา — เคยทำไว้แล้วไม่ต้องทำซ้ำ (เว้นแต่สัญญาเปลี่ยนเวอร์ชัน)
+  const hasFace = faceUrls.length || (p && p.face_scan_count);
+  if(!hasFace) return alert('กรุณาสแกนใบหน้าก่อนส่งใบสมัครครับ');
+  const needSign = !(p && p.contract_signed && !p.contract_outdated);
+  if(!document.getElementById('ragree').checked)
+    return alert('กรุณาอ่านและติ๊กยอมรับหนังสือสัญญาครับ');
+  if(needSign && !signed) return alert('กรุณาเซ็นชื่อในกรอบด้านล่างครับ');
+
   const btn = document.getElementById('regbtn');
   const wasProvider = state.me.is_provider;
   btn.disabled = true; btn.textContent = 'กำลังส่ง…';
   try{
+    const signatureUrl = signed ? await uploadSignature() : null;
     await api('/provider/register', {method:'POST', body:{
-      display_name: name,
-      phone: document.getElementById('rphone').value.trim() || null,
+      display_name: name, full_name: fullName, national_id: nid, phone,
       bio: document.getElementById('rbio').value.trim() || null,
       promptpay_id: document.getElementById('rpromptpay').value.trim() || null,
       category_slugs: cats, subcategory_slugs: subs, tambon_ids: tams,
+      face_scan_urls: faceUrls,
+      contract_signature_url: signatureUrl,
+      contract_version: signatureUrl ? contractVersion : null,
       ...state.docs,
     }});
+    faceUrls = []; clearSign();
     await refreshMe();
     if(state.me.is_provider){
       document.getElementById('pnav').style.display='flex';

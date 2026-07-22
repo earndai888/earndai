@@ -57,3 +57,18 @@ async def ensure_subcategories() -> None:
     await pool.execute(
         "UPDATE service_subcategories SET active = false WHERE slug <> ALL($1::text[])",
         list(SUBCATEGORIES))
+
+
+async def ensure_provider_kyc() -> None:
+    """คอลัมน์ยืนยันตัวตนช่าง: ชื่อจริง เลขบัตร สแกนหน้า ลายเซ็นสัญญา"""
+    pool = db.get_pool()
+    await pool.execute(
+        """ALTER TABLE providers
+             ADD COLUMN IF NOT EXISTS full_name              text,
+             ADD COLUMN IF NOT EXISTS national_id            text,
+             ADD COLUMN IF NOT EXISTS address                text,
+             ADD COLUMN IF NOT EXISTS face_scan_urls         text[] NOT NULL DEFAULT '{}',
+             ADD COLUMN IF NOT EXISTS contract_signature_url text,
+             ADD COLUMN IF NOT EXISTS contract_version       text,
+             ADD COLUMN IF NOT EXISTS contract_signed_at     timestamptz"""
+    )

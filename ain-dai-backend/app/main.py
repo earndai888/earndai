@@ -47,8 +47,9 @@ async def lifespan(app: FastAPI):
     await ai_chat.ensure_table()  # ตารางประวัติแชท AI (สร้างอัตโนมัติถ้ายังไม่มี)
     try:
         await catalog.ensure_subcategories()  # กลุ่มงานย่อยของงานด่วน 24 ชม.
+        await catalog.ensure_provider_kyc()   # คอลัมน์ยืนยันตัวตนช่าง
     except Exception:
-        log.exception("ซิงก์กลุ่มงานย่อยไม่สำเร็จ — ระบบยังใช้งานได้แบบไม่มีกลุ่มย่อย")
+        log.exception("ซิงก์โครงสร้างฐานข้อมูลไม่สำเร็จ")
     task = asyncio.create_task(auto_release_loop())
     yield
     task.cancel()

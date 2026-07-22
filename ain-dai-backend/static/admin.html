@@ -447,8 +447,15 @@ function openDrawer(id){
       ${p.phone?`<a class="btn sm ghost" href="tel:${esc(p.phone)}">📞 โทรหาช่าง</a>`:''}
       <span class="muted" style="align-self:center">สมัครเมื่อ ${dt(p.created_at)}</span>
     </div>
+    <label class="f">ชื่อจริงตามบัตร</label>
+    <div>${p.full_name ? '<b>'+esc(p.full_name)+'</b>' :
+      '<span class="chip danger">ช่างยังไม่ได้กรอกชื่อจริง (สมัครก่อนระบบยืนยันตัวตน)</span>'}</div>
     <label class="f">เอกสารยืนยันตัวตน (คลิกรูปเพื่อขยาย)</label>
     <div class="thumbs">${docImgs(p)}</div>
+    <label class="f">รูปสแกนใบหน้า <span class="muted">(เทียบกับรูปบัตรว่าคนเดียวกันไหม)</span></label>
+    <div class="thumbs">${faceImgs(p)}</div>
+    <label class="f">หนังสือสัญญา</label>
+    <div>${contractBlock(p)}</div>
     <label class="f">พื้นที่รับงาน</label>
     <div>${(p.tambon_names||[]).map(t=>`<span class="chip gray">ต.${esc(t)}</span>`).join('')||'<span class="muted">-</span>'}</div>
     <label class="f">อนุมัติให้รับงานหมวด (คลิกเลือก/ยกเลิก)</label>
@@ -462,7 +469,7 @@ function openDrawer(id){
     <label class="f">แท็กความถนัด (คั่นด้วยจุลภาค)</label>
     <input type="text" id="dTags" style="width:100%"
            placeholder="เช่น ล้างแอร์ติดผนัง, เติมน้ำยา, ปะยาง" value="${esc((p.skill_tags||[]).join(', '))}">
-    <label class="f">เลขประจำตัวประชาชน 13 หลัก <span class="muted">(กรอกจากบัตร — ใช้ออกใบ 50 ทวิ)</span></label>
+    <label class="f">เลขประจำตัวประชาชน 13 หลัก <span class="muted">(ช่างกรอกมาเอง — ตรวจกับรูปบัตรแล้วแก้ได้)</span></label>
     <input type="text" id="dNid" style="width:100%" maxlength="20"
            placeholder="x-xxxx-xxxxx-xx-x" value="${esc(p.national_id||'')}">
     <label class="f">ที่อยู่ตามบัตร <span class="muted">(ใช้ออกใบ 50 ทวิ)</span></label>
@@ -486,6 +493,21 @@ function docImgs(p){
        <img src="${esc(u)}" onclick="this.classList.toggle('zoom')" alt="${lb}">
        <div class="muted" style="font-size:12px">${lb}</div></div>`).join('');
   return out || '<span class="chip danger">ช่างยังไม่ได้อัปโหลดเอกสาร — ควรกด "ขอเอกสารเพิ่ม"</span>';
+}
+function faceImgs(p){
+  const urls = p.face_scan_urls || [];
+  return urls.length
+    ? urls.map((u,i)=>`<div style="display:inline-block;text-align:center">
+         <img src="${esc(u)}" onclick="this.classList.toggle('zoom')" alt="สแกนใบหน้า ${i+1}">
+         <div class="muted" style="font-size:12px">ท่าที่ ${i+1}</div></div>`).join('')
+    : '<span class="chip danger">ยังไม่มีรูปสแกนใบหน้า</span>';
+}
+function contractBlock(p){
+  if(!p.contract_signature_url) return '<span class="chip danger">ยังไม่ได้เซ็นหนังสือสัญญา</span>';
+  return `<div style="display:inline-block;text-align:center">
+      <img src="${esc(p.contract_signature_url)}" onclick="this.classList.toggle('zoom')" alt="ลายเซ็น">
+      <div class="muted" style="font-size:12px">เซ็นเมื่อ ${dt(p.contract_signed_at)} · ฉบับ ${esc(p.contract_version||'-')}</div>
+    </div>`;
 }
 function closeDrawer(){document.getElementById('drawer').classList.remove('on')}
 async function doApprove(){

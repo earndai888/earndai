@@ -107,7 +107,8 @@ async def list_providers(
         SELECT p.id, p.approval_status, p.tier, p.skill_tags, p.active, p.verified,
                p.bio, p.promptpay_id, p.rating_avg, p.rating_count, p.jobs_done,
                p.id_card_url, p.selfie_url, p.license_url, p.admin_note,
-               p.national_id, p.address,
+               p.national_id, p.address, p.full_name, p.face_scan_urls,
+               p.contract_signature_url, p.contract_version, p.contract_signed_at,
                p.created_at, p.reviewed_at, p.categories, p.tambon_coverage,
                u.line_user_id, u.display_name, u.phone,
                (SELECT array_agg(c.name_th ORDER BY c.id) FROM service_categories c
@@ -459,7 +460,9 @@ async def wht_pdf(settlement_id: str, _: bool = Admin):
     pool = db.get_pool()
     row = await pool.fetchrow("""
         SELECT s.id, s.gross, s.tax_withheld, s.created_at, s.wht_no,
-               j.title, u.display_name AS payee_name,
+               j.title,
+               -- ใบ 50 ทวิ ต้องใช้ชื่อจริงตามบัตร ไม่ใช่ชื่อร้านที่ตั้งไว้โชว์ลูกค้า
+               COALESCE(NULLIF(pr.full_name, ''), u.display_name) AS payee_name,
                pr.national_id, pr.address
           FROM settlements s
           JOIN jobs j ON j.id = s.job_id
