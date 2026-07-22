@@ -215,7 +215,7 @@ INSERT INTO service_categories (slug, name_th, icon) VALUES
   ('ac-cleaning',  'ช่างแอร์',           '❄️'),
   ('gardening',    'งานสวน/ตัดหญ้า',     '🌿'),
   ('housekeeping', 'แม่บ้าน',            '🧹'),
-  ('emergency',    'งานฉุกเฉิน 24 ชม.',  '🚨');
+  ('emergency',    'งานด่วน 24 ชม.',  '🚨');
 
 -- ตำบลในอำเภอกันทรลักษ์ จ.ศรีสะเกษ (20 ตำบล)
 INSERT INTO tambons (name, amphoe) VALUES

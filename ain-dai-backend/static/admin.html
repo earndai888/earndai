@@ -366,7 +366,7 @@ async function loadOverview(){
     ${kpi('ช่างรออนุมัติ', num(s.providers_pending), s.providers_pending>0?'warn':'')}
     ${kpi('ช่างที่รับงานได้', num(s.providers_active))}
     ${kpi('คะแนนเฉลี่ย', s.avg_rating>0?('★ '+s.avg_rating):'-')}
-    ${kpi('งานฉุกเฉิน ตอบใน', emer!=null?(emer+' นาที'):'ยังไม่มีข้อมูล', emer!=null&&emer>30?'warn':'')}
+    ${kpi('งานด่วน ตอบใน', emer!=null?(emer+' นาที'):'ยังไม่มีข้อมูล', emer!=null&&emer>30?'warn':'')}
     ${kpi('งานรอช่าง', num(s.jobs_new))}
     ${kpi('เรื่องร้องเรียน', num(s.disputes_open), s.disputes_open>0?'warn':'')}`;
   badge('bPending', s.providers_pending);
@@ -418,7 +418,8 @@ async function loadApprove(){
       dt(p.created_at),
       `<b>${esc(p.display_name)}</b><br><span class="muted">${esc(p.phone||'ไม่ระบุเบอร์')}</span>`,
       (p.tambon_names||[]).map(t=>`<span class="chip gray">ต.${esc(t)}</span>`).join('')||'-',
-      (p.category_names||[]).map(c=>`<span class="chip">${esc(c)}</span>`).join('')||'-',
+      (p.category_names||[]).map(c=>`<span class="chip">${esc(c)}</span>`).join('') +
+        (p.subcategory_names||[]).map(s=>`<span class="chip gray">${esc(s)}</span>`).join('') || '-',
       docChip(p),
       `<button class="btn sm" onclick='openDrawer(${JSON.stringify(p.id)})'>ตรวจเอกสาร</button>`,
     ])) : '<div class="muted">ไม่มีรายการในสถานะนี้</div>';
@@ -523,7 +524,8 @@ async function loadDirectory(){
     rows.map(p=>[
       `<b>${esc(p.display_name)}</b><br><span class="muted">${esc(p.phone||'-')}</span>`,
       `<span class="chip ${p.tier>=3?'warn':''}">${TIER_TH[p.tier]||p.tier}</span>`,
-      (p.category_names||[]).map(x=>`<span class="chip">${esc(x)}</span>`).join(''),
+      (p.category_names||[]).map(x=>`<span class="chip">${esc(x)}</span>`).join('') +
+        (p.subcategory_names||[]).map(s=>`<span class="chip gray">${esc(s)}</span>`).join(''),
       (p.tambon_names||[]).map(x=>`<span class="chip gray">${esc(x)}</span>`).join(''),
       num(p.jobs_done)+' งาน',
       p.rating_count>0?`★ ${(+p.rating_avg).toFixed(2)} <span class="muted">(${p.rating_count})</span>`:'-',

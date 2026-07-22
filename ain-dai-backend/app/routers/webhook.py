@@ -5,7 +5,7 @@ from urllib.parse import parse_qsl
 from fastapi import APIRouter, Header, HTTPException, Request
 
 from .. import ai_chat, db, flex, line_api
-from ..intent import classify
+from ..intent import classify, classify_sub
 
 router = APIRouter()
 log = logging.getLogger("webhook")
@@ -42,14 +42,18 @@ async def handle_event(event: dict) -> None:
     if etype == "postback":
         data = dict(parse_qsl(event.get("postback", {}).get("data", "")))
         if slug := data.get("category"):
-            await line_api.reply(reply_token, [flex.open_form_message(slug)])
+            sub = data.get("sub")
+            # เลือกหมวดที่มีงานย่อยแต่ยังไม่ได้บอกว่าเรื่องอะไร → ถามต่ออีกชั้น
+            ask_sub = flex.subcategory_quick_reply(slug) if not sub else None
+            await line_api.reply(reply_token, [
+                ask_sub or flex.open_form_message(slug, subcategory_slug=sub)])
         return
 
     # บอทถูกเชิญเข้ากลุ่ม/ห้อง → แนะนำวิธีผูกหมวดงาน
     if etype == "join":
         await line_api.reply(reply_token, [{
             "type": "text",
-            "text": "สวัสดีครับ 🙌 นี่คือบอทเอิ้นได้\n\nตั้งให้กลุ่มนี้เป็นกลุ่มช่างของหมวดงาน — พิมพ์:\nผูกหมวด ช่างแอร์\n(หรือ งานสวน / แม่บ้าน / ฉุกเฉิน)\n\nงานใหม่ในหมวดนี้จะแจ้งเข้ากลุ่มอัตโนมัติ\nเลิกรับแจ้งเตือน พิมพ์: เลิกผูก"}])
+            "text": "สวัสดีครับ 🙌 นี่คือบอทเอิ้นได้\n\nตั้งให้กลุ่มนี้เป็นกลุ่มช่างของหมวดงาน — พิมพ์:\nผูกหมวด ช่างแอร์\n(หรือ งานสวน / แม่บ้าน / งานด่วน)\n\nงานใหม่ในหมวดนี้จะแจ้งเข้ากลุ่มอัตโนมัติ\nเลิกรับแจ้งเตือน พิมพ์: เลิกผูก"}])
         return
 
     if etype == "message" and event["message"].get("type") == "text":
@@ -75,14 +79,22 @@ async def handle_event(event: dict) -> None:
                     messages.append({"type": "text", "text": ai["text"]})
                 if ai["form"]:
                     # ส่งปุ่มพร้อมข้อมูลที่คุยไว้ → หน้าเว็บกรอกให้อัตโนมัติ
-                    messages.append(flex.open_form_message(**ai["form"]))
+                    # ยกเว้นงานด่วนที่ยังไม่รู้ว่าด่วนเรื่องอะไร → ถามก่อน
+                    f = ai["form"]
+                    ask_sub = (flex.subcategory_quick_reply(f["category_slug"])
+                               if not f.get("subcategory_slug") else None)
+                    messages.append(ask_sub or flex.open_form_message(**f))
                 await line_api.reply(reply_token, messages)
                 return
 
         # ชั้นที่ 1 (fallback): keyword matching
         result = classify(text)
         if result.confident:
-            await line_api.reply(reply_token, [flex.open_form_message(result.slug)])
+            sub = classify_sub(text, result.slug)
+            # หมวดงานด่วน: ถ้าเดาไม่ออกว่าด่วนเรื่องอะไร ให้ถามก่อน อย่าเพิ่งส่งฟอร์ม
+            ask_sub = flex.subcategory_quick_reply(result.slug) if not sub else None
+            await line_api.reply(reply_token, [
+                ask_sub or flex.open_form_message(result.slug, subcategory_slug=sub)])
         else:
             await line_api.reply(reply_token, [flex.category_quick_reply()])
 

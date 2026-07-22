@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from .. import db, flex, line_api, promptpay
 from ..config import settings
-from ..intent import CATEGORY_NAMES
+from ..intent import CATEGORY_NAMES, subcategories_of
 from ..settlement import FeeConfig, compute_split
 
 router = APIRouter(prefix="/api")
@@ -63,6 +63,14 @@ async def meta():
     pool = db.get_pool()
     cats = await pool.fetch(
         "SELECT slug, name_th, icon FROM service_categories WHERE active ORDER BY id")
+    try:
+        subs = await pool.fetch(
+            """SELECT s.slug, s.name_th, s.icon, s.examples, c.slug AS category_slug
+                 FROM service_subcategories s JOIN service_categories c ON c.id = s.category_id
+                WHERE s.active AND c.active ORDER BY s.sort, s.id""")
+    except Exception:  # ตารางยังไม่ถูกสร้าง (ซิงก์ตอน startup พลาด) — ไม่ควรทำให้ทั้งหน้าล่ม
+        log.warning("อ่านกลุ่มงานย่อยไม่ได้ — แสดงหน้าเว็บแบบไม่มีกลุ่มย่อย")
+        subs = []
     if settings.pilot_amphoe:
         tambons = await pool.fetch(
             "SELECT id, name, amphoe FROM tambons WHERE amphoe = $1 ORDER BY name",
@@ -70,6 +78,7 @@ async def meta():
     else:
         tambons = await pool.fetch("SELECT id, name, amphoe FROM tambons ORDER BY id")
     return {"categories": [dict(r) for r in cats],
+            "subcategories": [dict(r) for r in subs],
             "tambons": [dict(r) for r in tambons],
             "liff_id": settings.liff_id,
             "dev_mode": settings.dev_mode}
@@ -81,7 +90,9 @@ async def me(user: dict = Depends(current_user)):
     prov = await db.get_pool().fetchrow(
         """SELECT p.*,
                   (SELECT array_agg(c.slug) FROM service_categories c
-                    WHERE c.id = ANY(p.categories)) AS category_slugs
+                    WHERE c.id = ANY(p.categories)) AS category_slugs,
+                  (SELECT array_agg(s.slug) FROM service_subcategories s
+                    WHERE s.id = ANY(p.subcategories)) AS subcategory_slugs
              FROM providers p WHERE p.user_id = $1""",
         user["id"])
     return {
@@ -96,6 +107,7 @@ async def me(user: dict = Depends(current_user)):
         "provider": {
             "bio": prov["bio"], "promptpay_id": prov["promptpay_id"],
             "category_slugs": prov["category_slugs"] or [],
+            "subcategory_slugs": prov["subcategory_slugs"] or [],
             "tambon_coverage": prov["tambon_coverage"],
             "rating_avg": prov["rating_avg"], "rating_count": prov["rating_count"],
             "jobs_done": prov["jobs_done"], "verified": prov["verified"],
@@ -114,6 +126,8 @@ class ProviderRegisterIn(BaseModel):
     bio: str | None = Field(default=None, max_length=300)
     promptpay_id: str | None = Field(default=None, max_length=20)
     category_slugs: list[str] = Field(min_length=1)
+    # รับงานด่วนแบบไหนบ้าง (ว่าง = รับทุกแบบในหมวดที่สมัคร)
+    subcategory_slugs: list[str] = []
     tambon_ids: list[int] = Field(min_length=1)
     # เอกสารยืนยันตัวตน (อัปโหลดผ่าน /api/uploads แล้วส่ง url มา)
     id_card_url: str | None = None
@@ -129,6 +143,13 @@ async def provider_register(body: ProviderRegisterIn, user: dict = Depends(curre
         list(set(body.category_slugs)))
     if len(cat_rows) != len(set(body.category_slugs)):
         raise HTTPException(400, "มีหมวดงานที่ไม่รู้จัก")
+    sub_slugs = list(set(body.subcategory_slugs))
+    sub_rows = await pool.fetch(
+        """SELECT id FROM service_subcategories
+            WHERE slug = ANY($1::text[]) AND active AND category_id = ANY($2::int[])""",
+        sub_slugs, [r["id"] for r in cat_rows]) if sub_slugs else []
+    if len(sub_rows) != len(sub_slugs):
+        raise HTTPException(400, "มีประเภทงานย่อยที่ไม่รู้จัก หรือไม่อยู่ในหมวดที่เลือก")
     tambon_ids = list(set(body.tambon_ids))
     tam_count = await pool.fetchval(
         "SELECT count(*) FROM tambons WHERE id = ANY($1::int[])", tambon_ids)
@@ -137,18 +158,21 @@ async def provider_register(body: ProviderRegisterIn, user: dict = Depends(curre
     # สมัครใหม่/แก้ไข → กลับเข้าคิวรออนุมัติ ยกเว้นช่างที่อนุมัติแล้ว (แก้โปรไฟล์ได้เลย)
     row = await pool.fetchrow(
         """INSERT INTO providers (user_id, categories, tambon_coverage, bio, promptpay_id,
-                                  id_card_url, selfie_url, license_url, approval_status, active)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending',false)
+                                  id_card_url, selfie_url, license_url, subcategories,
+                                  approval_status, active)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending',false)
            ON CONFLICT (user_id) DO UPDATE
              SET categories = $2, tambon_coverage = $3, bio = $4, promptpay_id = $5,
                  id_card_url = COALESCE($6, providers.id_card_url),
                  selfie_url  = COALESCE($7, providers.selfie_url),
                  license_url = COALESCE($8, providers.license_url),
+                 subcategories = $9,
                  approval_status = CASE WHEN providers.approval_status = 'approved'
                                         THEN 'approved' ELSE 'pending' END
            RETURNING approval_status""",
         user["id"], [r["id"] for r in cat_rows], tambon_ids,
-        body.bio, body.promptpay_id, body.id_card_url, body.selfie_url, body.license_url)
+        body.bio, body.promptpay_id, body.id_card_url, body.selfie_url, body.license_url,
+        [r["id"] for r in sub_rows])
     await pool.execute(
         "UPDATE users SET display_name = $2, phone = $3, role = 'provider' WHERE id = $1",
         user["id"], body.display_name, body.phone)
@@ -188,6 +212,7 @@ async def upload_file(file: UploadFile = File(...), user: dict = Depends(current
 
 class JobIn(BaseModel):
     category_slug: str
+    subcategory_slug: str | None = None   # งานด่วน 24 ชม. = ต้องบอกว่าด่วนแบบไหน
     tambon_id: int
     title: str = Field(min_length=2, max_length=120)
     description: str | None = None
@@ -206,30 +231,42 @@ async def create_job(body: JobIn, user: dict = Depends(current_user)):
     cat = await pool.fetchrow("SELECT * FROM service_categories WHERE slug = $1", body.category_slug)
     if not cat:
         raise HTTPException(400, "ไม่รู้จักหมวดงานนี้")
+    sub = None
+    if body.subcategory_slug:
+        sub = await pool.fetchrow(
+            "SELECT * FROM service_subcategories WHERE slug = $1 AND category_id = $2",
+            body.subcategory_slug, cat["id"])
+        if not sub:
+            raise HTTPException(400, "ไม่รู้จักประเภทงานย่อยนี้")
+    elif subcategories_of(body.category_slug):
+        raise HTTPException(400, "หมวดนี้ต้องเลือกประเภทงานด้วยครับ")
     job = await pool.fetchrow(
-        """INSERT INTO jobs (customer_id, category_id, tambon_id, title, description,
+        """INSERT INTO jobs (customer_id, category_id, subcategory_id, tambon_id, title, description,
              photos, voice_note_url, budget_min, budget_max, preferred_date,
              preferred_time, address_full, status, expires_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'bidding', now() + interval '72 hours')
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'bidding', now() + interval '72 hours')
            RETURNING *""",
-        user["id"], cat["id"], body.tambon_id, body.title, body.description,
-        body.photos, body.voice_note_url, body.budget_min, body.budget_max,
+        user["id"], cat["id"], sub["id"] if sub else None, body.tambon_id, body.title,
+        body.description, body.photos, body.voice_note_url, body.budget_min, body.budget_max,
         body.preferred_date, body.preferred_time, body.address_full,
     )
-    await broadcast_job(dict(job), cat["name_th"])
+    await broadcast_job(dict(job), cat["name_th"], sub["name_th"] if sub else None)
     return {"job_id": str(job["id"]), "status": job["status"]}
 
 
-async def broadcast_job(job: dict, category_name: str) -> None:
+async def broadcast_job(job: dict, category_name: str, sub_name: str | None = None) -> None:
     """แจ้งเตือนงานใหม่ (ปิดข้อมูลลูกค้า):
     1) push ตรงถึงช่างทุกคนที่รับหมวด+ตำบลนี้ — ทำงานทันที ไม่ต้องตั้งกลุ่ม
     2) ส่งเข้ากลุ่มไลน์ช่างประจำตำบล ถ้ามีลงทะเบียนไว้"""
     pool = db.get_pool()
     tambon = await pool.fetchrow("SELECT name FROM tambons WHERE id = $1", job["tambon_id"])
     card = flex.job_card(
-        {**job, "id": str(job["id"])}, category_name, tambon["name"] if tambon else "-")
+        {**job, "id": str(job["id"])}, category_name, tambon["name"] if tambon else "-",
+        sub_name=sub_name)
 
     # 1) ช่างที่รับหมวดนี้และครอบคลุมตำบลนี้ (ไม่ส่งหาเจ้าของงานเอง เผื่อช่างประกาศงาน)
+    #    งานที่มีประเภทย่อย (งานด่วน) — ส่งเฉพาะช่างที่รับประเภทนั้น
+    #    ช่างที่ยังไม่ได้เลือกประเภทย่อยเลย ถือว่ารับทุกประเภทในหมวด (ข้อมูลเก่า)
     providers = await pool.fetch(
         """SELECT DISTINCT u.line_user_id
              FROM providers p JOIN users u ON u.id = p.user_id
@@ -237,8 +274,9 @@ async def broadcast_job(job: dict, category_name: str) -> None:
               AND $1 = ANY(p.categories)
               AND $2 = ANY(p.tambon_coverage)
               AND u.id <> $3
+              AND ($4::int IS NULL OR p.subcategories = '{}' OR $4 = ANY(p.subcategories))
               AND u.line_user_id NOT LIKE 'Udemo-%' AND u.line_user_id NOT LIKE 'Utest-%'""",
-        job["category_id"], job["tambon_id"], job["customer_id"])
+        job["category_id"], job["tambon_id"], job["customer_id"], job.get("subcategory_id"))
     for r in providers:
         try:
             await line_api.push(r["line_user_id"], [card])
@@ -316,11 +354,14 @@ async def list_bids(job_id: str, user: dict = Depends(current_user)):
 async def my_jobs(user: dict = Depends(current_user)):
     """งานทั้งหมดของลูกค้าคนนี้ (ใหม่→เก่า)"""
     rows = await db.get_pool().fetch(
-        """SELECT j.id, j.title, j.status, j.created_at, c.icon, c.name_th AS category_name,
+        """SELECT j.id, j.title, j.status, j.created_at,
+                  COALESCE(s.icon, c.icon) AS icon,
+                  COALESCE(s.name_th, c.name_th) AS category_name,
                   t.name AS tambon_name,
                   (SELECT count(*) FROM bids b WHERE b.job_id = j.id AND b.status = 'active') AS bids_count
              FROM jobs j
              JOIN service_categories c ON c.id = j.category_id
+             LEFT JOIN service_subcategories s ON s.id = j.subcategory_id
              JOIN tambons t ON t.id = j.tambon_id
             WHERE j.customer_id = $1
             ORDER BY j.created_at DESC LIMIT 20""",
@@ -341,16 +382,22 @@ async def provider_jobs(user: dict = Depends(current_user)):
     open_jobs = await pool.fetch(
         """SELECT j.id, j.title, j.description, j.photos, j.voice_note_url,
                   j.budget_min, j.budget_max, j.preferred_time, j.created_at,
-                  c.icon, c.name_th AS category_name, t.name AS tambon_name,
+                  COALESCE(s.icon, c.icon) AS icon,
+                  COALESCE(s.name_th, c.name_th) AS category_name,
+                  t.name AS tambon_name,
                   (SELECT b.price FROM bids b
                     WHERE b.job_id = j.id AND b.provider_id = $1 AND b.status = 'active') AS my_price
              FROM jobs j
              JOIN service_categories c ON c.id = j.category_id
+             LEFT JOIN service_subcategories s ON s.id = j.subcategory_id
              JOIN tambons t ON t.id = j.tambon_id
             WHERE j.status = 'bidding'
               AND j.tambon_id = ANY($2) AND j.category_id = ANY($3)
+              -- งานที่มีประเภทย่อย: เห็นเฉพาะประเภทที่ช่างรับ (ยังไม่เลือก = เห็นทุกประเภท)
+              AND (j.subcategory_id IS NULL OR $4::int[] = '{}'
+                   OR j.subcategory_id = ANY($4))
             ORDER BY j.created_at DESC LIMIT 20""",
-        prov["id"], prov["tambon_coverage"], prov["categories"],
+        prov["id"], prov["tambon_coverage"], prov["categories"], prov["subcategories"] or [],
     )
     mine = await pool.fetch(
         """SELECT j.id, j.title, j.status, b.price, c.icon, t.name AS tambon_name,
@@ -373,9 +420,12 @@ async def job_detail(job_id: str, user: dict = Depends(current_user)):
     """สถานะงานฉบับเต็ม — ลูกค้าเห็น OTP, ช่างที่ถูกเลือกเห็นงานตน"""
     pool = db.get_pool()
     job = await pool.fetchrow(
-        """SELECT j.*, c.name_th AS category_name, c.icon, t.name AS tambon_name
+        """SELECT j.*, c.name_th AS category_name,
+                  COALESCE(s.icon, c.icon) AS icon, s.name_th AS sub_name,
+                  t.name AS tambon_name
              FROM jobs j
              JOIN service_categories c ON c.id = j.category_id
+             LEFT JOIN service_subcategories s ON s.id = j.subcategory_id
              JOIN tambons t ON t.id = j.tambon_id
             WHERE j.id = $1::uuid""",
         job_id,
@@ -406,7 +456,7 @@ async def job_detail(job_id: str, user: dict = Depends(current_user)):
         "voice_note_url": job["voice_note_url"],
         "budget_min": job["budget_min"], "budget_max": job["budget_max"],
         "preferred_time": job["preferred_time"],
-        "category_name": job["category_name"], "icon": job["icon"],
+        "category_name": job["sub_name"] or job["category_name"], "icon": job["icon"],
         "tambon_name": job["tambon_name"], "bids_count": bids_count,
         "is_customer": is_customer, "is_provider": is_provider,
         "otp": job["start_otp"] if is_customer and job["status"] == "assigned" else None,

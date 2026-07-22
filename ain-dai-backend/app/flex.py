@@ -2,7 +2,7 @@
 from urllib.parse import urlencode
 
 from .config import settings
-from .intent import CATEGORY_NAMES
+from .intent import CATEGORY_NAMES, SUBCATEGORIES, subcategories_of
 
 GREEN = "#2BA84A"
 NAVY = "#1E3A5F"
@@ -41,6 +41,7 @@ def openchat_invite(links: list[dict]) -> dict:
 
 def open_form_message(
     category_slug: str | None,
+    subcategory_slug: str | None = None,
     description: str | None = None,
     tambon: str | None = None,
     budget_min: float | None = None,
@@ -50,9 +51,14 @@ def open_form_message(
     """ปุ่มเปิดฟอร์มประกาศงาน — เติมข้อมูลที่คุยกับ AI ไว้ให้ล่วงหน้า
     (ส่งผ่าน query string ให้หน้าเว็บกรอกลงฟอร์มอัตโนมัติ)"""
     name = CATEGORY_NAMES.get(category_slug, "ช่าง") if category_slug else "ช่าง"
+    subcat = SUBCATEGORIES.get(subcategory_slug or "")
+    headline = f"งานด่วน — {subcat['name']} ใช่ไหมครับ?" if subcat else f"เอิ้นหา{name}ใช่ไหมครับ?"
+    btn_label = "📢 แจ้งงานด่วน" if subcat else f"📢 เอิ้นหา{name}"
     params: dict[str, str] = {}
     if category_slug:
         params["category"] = category_slug
+    if subcategory_slug:
+        params["sub"] = subcategory_slug
     if tambon:
         params["tambon"] = tambon[:40]
     if description:
@@ -77,13 +83,14 @@ def open_form_message(
         "contents": {
             "type": "bubble",
             "body": {"type": "box", "layout": "vertical", "spacing": "sm", "contents": [
-                {"type": "text", "text": f"เอิ้นหา{name}ใช่ไหมครับ?", "weight": "bold",
+                {"type": "text", "text": headline, "weight": "bold",
                  "size": "lg", "color": NAVY, "wrap": True},
                 {"type": "text", "text": sub, "size": "sm", "color": "#68776C", "wrap": True},
             ]},
             "footer": {"type": "box", "layout": "vertical", "contents": [
                 {"type": "button", "style": "primary", "color": GREEN, "height": "sm",
-                 "action": {"type": "uri", "label": f"📢 เอิ้นหา{name}", "uri": liff_url(path)}},
+                 # LINE จำกัด label ปุ่มไว้ 20 ตัวอักษร — เกินแล้วยิงไม่ผ่าน
+                 "action": {"type": "uri", "label": btn_label[:20], "uri": liff_url(path)}},
             ]},
         },
     }
@@ -103,8 +110,30 @@ def category_quick_reply() -> dict:
     }
 
 
-def job_card(job: dict, category_name: str, tambon_name: str, bid_count: int = 0) -> dict:
+def subcategory_quick_reply(category_slug: str) -> dict | None:
+    """หมวดที่มีงานย่อย (งานด่วน 24 ชม.) → ให้ลูกค้าจิ้มว่าด่วนเรื่องอะไร
+    เพราะช่างรถไถกับช่างกุญแจคนละคนกัน ต้องรู้ก่อนถึงจะส่งงานให้ถูกคน"""
+    subs = subcategories_of(category_slug)
+    if not subs:
+        return None
+    items = [
+        {"type": "action", "action": {
+            "type": "postback", "label": f"{s['icon']} {s['name']}"[:20],
+            "data": f"category={category_slug}&sub={slug}", "displayText": s["name"]}}
+        for slug, s in subs.items()
+    ]
+    return {
+        "type": "text",
+        "text": "ด่วนเรื่องอะไรครับพี่? เลือกได้เลย 👇",
+        "quickReply": {"items": items},
+    }
+
+
+def job_card(job: dict, category_name: str, tambon_name: str, bid_count: int = 0,
+             sub_name: str | None = None) -> dict:
     """การ์ดงานส่งเข้ากลุ่มช่างตำบล — ไม่มีข้อมูลติดต่อลูกค้า"""
+    if sub_name:  # งานด่วน — บอกให้ชัดว่าด่วนแบบไหน ช่างจะได้รู้ทันทีว่างานของตนไหม
+        category_name = f"{category_name} • {sub_name}"
     budget = ""
     if job.get("budget_min") or job.get("budget_max"):
         budget = f"งบ {int(job.get('budget_min') or 0):,}–{int(job.get('budget_max') or 0):,} บาท"

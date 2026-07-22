@@ -112,6 +112,8 @@ async def list_providers(
                u.line_user_id, u.display_name, u.phone,
                (SELECT array_agg(c.name_th ORDER BY c.id) FROM service_categories c
                  WHERE c.id = ANY(p.categories)) AS category_names,
+               (SELECT array_agg(s.name_th ORDER BY s.sort) FROM service_subcategories s
+                 WHERE s.id = ANY(p.subcategories)) AS subcategory_names,
                (SELECT array_agg(t.name ORDER BY t.name) FROM tambons t
                  WHERE t.id = ANY(p.tambon_coverage)) AS tambon_names
           FROM providers p JOIN users u ON u.id = p.user_id

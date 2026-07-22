@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import ai_chat, db
+from . import ai_chat, catalog, db
 from .config import settings
 from .routers import admin, jobs, webhook
 from .routers.jobs import create_settlement
@@ -45,6 +45,10 @@ async def auto_release_loop() -> None:
 async def lifespan(app: FastAPI):
     await db.connect()
     await ai_chat.ensure_table()  # ตารางประวัติแชท AI (สร้างอัตโนมัติถ้ายังไม่มี)
+    try:
+        await catalog.ensure_subcategories()  # กลุ่มงานย่อยของงานด่วน 24 ชม.
+    except Exception:
+        log.exception("ซิงก์กลุ่มงานย่อยไม่สำเร็จ — ระบบยังใช้งานได้แบบไม่มีกลุ่มย่อย")
     task = asyncio.create_task(auto_release_loop())
     yield
     task.cancel()

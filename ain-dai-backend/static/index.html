@@ -39,6 +39,12 @@
   <div class="pagehead"><button class="back" onclick="go('home')">‹</button><h1>เอิ้นหาช่าง</h1></div>
   <label class="f">ต้องการช่างอะไร</label>
   <div class="chips" id="catchips"></div>
+  <!-- งานด่วน 24 ชม. — ช่างคนละกลุ่มกัน ต้องเลือกว่าด่วนเรื่องอะไร -->
+  <div id="subbox" style="display:none">
+    <label class="f">ด่วนเรื่องอะไร</label>
+    <div class="chips" id="subchips"></div>
+    <div class="note" id="subhint" style="margin:-4px 18px 10px"></div>
+  </div>
   <label class="f">พื้นที่รับบริการ</label>
   <div class="row2">
     <select class="inp" id="amphoesel"></select>
@@ -190,6 +196,12 @@ function prefillFromChat(){
   pick(cat);                       // เลือกหมวด + เด้งเข้าหน้าฟอร์ม
   const filled = [];
 
+  const sub = q.get('sub');
+  if(sub){
+    showSubs(cat, sub);            // ติ๊กประเภทงานด่วนที่คุยกันไว้ให้เลย
+    if(document.querySelector('#subchips .chip.on')) filled.push('ประเภทงานด่วน');
+  }
+
   const tambon = (q.get('tambon')||'').replace(/^ต\.?\s*/, '').trim();
   if(tambon){
     const sel = document.getElementById('tambonsel');
@@ -241,8 +253,37 @@ async function loadTopProviders(){
 function pick(slug){
   go('post');
   document.querySelectorAll('#catchips .chip').forEach(c=>c.classList.toggle('on', c.dataset.slug===slug));
+  showSubs(slug);
 }
-function chip(el){document.querySelectorAll('#catchips .chip').forEach(c=>c.classList.remove('on'));el.classList.add('on');}
+function chip(el){
+  document.querySelectorAll('#catchips .chip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+  showSubs(el.dataset.slug);
+}
+
+/* ── งานย่อย (งานด่วน 24 ชม.) ── */
+function subsOf(catSlug){
+  return (META.subcategories||[]).filter(s=>s.category_slug===catSlug);
+}
+function showSubs(catSlug, keepSlug){
+  const subs = subsOf(catSlug);
+  const box = document.getElementById('subbox');
+  box.style.display = subs.length ? 'block' : 'none';
+  document.getElementById('subhint').textContent = '';
+  if(!subs.length) return;
+  document.getElementById('subchips').innerHTML = subs.map(s=>
+    `<button class="chip" data-slug="${s.slug}" data-name="${esc(s.name_th)}" onclick="subchip(this)">${s.icon||''} ${esc(s.name_th)}</button>`).join('');
+  if(keepSlug){
+    const hit = document.querySelector(`#subchips .chip[data-slug="${keepSlug}"]`);
+    if(hit) subchip(hit);
+  }
+}
+function subchip(el){
+  document.querySelectorAll('#subchips .chip').forEach(c=>c.classList.remove('on'));
+  el.classList.add('on');
+  const s = subsOf(document.querySelector('#catchips .chip.on')?.dataset.slug).find(x=>x.slug===el.dataset.slug);
+  document.getElementById('subhint').textContent = s && s.examples ? 'เช่น ' + s.examples.join(' / ') : '';
+}
 
 /* ── อัดเสียง ── */
 let mediaRec = null, chunks = [];
@@ -286,6 +327,8 @@ async function addPhotos(files){
 async function submitJob(){
   const cat = document.querySelector('#catchips .chip.on');
   if(!cat) return alert('เลือกหมวดงานก่อนครับ');
+  const sub = document.querySelector('#subchips .chip.on');
+  if(subsOf(cat.dataset.slug).length && !sub) return alert('เลือกด้วยครับว่าด่วนเรื่องอะไร');
   const btn = document.getElementById('postbtn');
   const tSel = document.getElementById('tambonsel');
   const desc = document.getElementById('desc').value.trim();
@@ -293,8 +336,9 @@ async function submitJob(){
   btn.disabled = true; btn.textContent = 'กำลังส่งประกาศ…';
   try{
     const r = await api('/jobs', {method:'POST', body:{
-      category_slug: cat.dataset.slug, tambon_id: +tSel.value,
-      title: cat.dataset.name + (desc ? ' — ' + desc.slice(0,40) : ' (ฟังเสียงแนบ)'),
+      category_slug: cat.dataset.slug, subcategory_slug: sub ? sub.dataset.slug : null,
+      tambon_id: +tSel.value,
+      title: (sub ? sub.dataset.name : cat.dataset.name) + (desc ? ' — ' + desc.slice(0,40) : ' (ฟังเสียงแนบ)'),
       description: desc || null, photos: state.photos, voice_note_url: state.voiceUrl,
       budget_min: parseFloat(document.getElementById('bmin').value) || null,
       budget_max: parseFloat(document.getElementById('bmax').value) || null,

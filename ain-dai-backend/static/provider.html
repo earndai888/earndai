@@ -27,6 +27,12 @@
   <input class="inp" id="rphone" placeholder="08xxxxxxxx" inputmode="tel" maxlength="20">
   <label class="f">รับงานหมวดไหนบ้าง * (เลือกได้หลายหมวด)</label>
   <div class="chips" id="rcats"></div>
+  <!-- งานด่วน 24 ชม. — ช่างรถไถกับช่างกุญแจคนละคน ต้องระบุว่ารับงานแบบไหน -->
+  <div id="rsubbox" style="display:none">
+    <label class="f">รับงานด่วนแบบไหนบ้าง * (เลือกได้หลายแบบ)</label>
+    <div class="chips" id="rsubs"></div>
+    <div class="note" style="margin:-4px 18px 10px">เลือกเฉพาะที่ทำได้จริง — ระบบจะส่งงานให้เฉพาะแบบที่เลือกไว้</div>
+  </div>
   <label class="f">รับงานตำบลไหนบ้าง * (เลือกได้หลายตำบล)</label>
   <div class="chips" id="rtambons"></div>
   <label class="f">แนะนำตัวสั้นๆ</label>
@@ -39,7 +45,7 @@
   <input type="file" id="idcard" accept="image/*" style="display:none" onchange="upDoc('id_card_url','idcardbox',this.files[0])">
   <div class="photo" onclick="document.getElementById('selfie').click()" id="selfiebox">🤳 รูปถ่ายคู่กับบัตรประชาชน</div>
   <input type="file" id="selfie" accept="image/*" style="display:none" onchange="upDoc('selfie_url','selfiebox',this.files[0])">
-  <div class="photo" onclick="document.getElementById('license').click()" id="licensebox">🚗 ใบขับขี่/ทะเบียนรถ (เฉพาะงานฉุกเฉิน)</div>
+  <div class="photo" onclick="document.getElementById('license').click()" id="licensebox">🚗 ใบขับขี่/ทะเบียนรถ (เฉพาะงานด่วน)</div>
   <input type="file" id="license" accept="image/*" style="display:none" onchange="upDoc('license_url','licensebox',this.files[0])">
 
   <button class="btn" id="regbtn" onclick="register()">ส่งใบสมัคร</button>
@@ -84,7 +90,9 @@ const short = n => ({'ตัดหญ้า-จัดสวน':'ตัดหญ
 (async function boot(){
   if(!await initAuth('Udemo-bird')) return;
   document.getElementById('rcats').innerHTML = META.categories.map(c=>
-    `<button class="chip" data-slug="${c.slug}" onclick="this.classList.toggle('on')">${esc(short(c.name_th))}</button>`).join('');
+    `<button class="chip" data-slug="${c.slug}" onclick="this.classList.toggle('on');syncSubs()">${esc(short(c.name_th))}</button>`).join('');
+  document.getElementById('rsubs').innerHTML = (META.subcategories||[]).map(s=>
+    `<button class="chip" data-slug="${s.slug}" data-cat="${s.category_slug}" onclick="this.classList.toggle('on')" title="${esc((s.examples||[]).join(' / '))}">${s.icon||''} ${esc(s.name_th)}</button>`).join('');
   document.getElementById('rtambons').innerHTML = META.tambons.map(t=>
     `<button class="chip" data-id="${t.id}" onclick="this.classList.toggle('on')">ต.${esc(t.name)}</button>`).join('');
   await refreshMe();
@@ -164,8 +172,23 @@ function prefillRegister(){
   document.getElementById('rpromptpay').value = p ? (p.promptpay_id || '') : '';
   const cats = p ? p.category_slugs : [];
   document.querySelectorAll('#rcats .chip').forEach(c=>c.classList.toggle('on', cats.includes(c.dataset.slug)));
+  const subs = p ? (p.subcategory_slugs || []) : [];
+  document.querySelectorAll('#rsubs .chip').forEach(c=>c.classList.toggle('on', subs.includes(c.dataset.slug)));
+  syncSubs();
   const tams = p ? p.tambon_coverage : [];
   document.querySelectorAll('#rtambons .chip').forEach(c=>c.classList.toggle('on', tams.includes(+c.dataset.id)));
+}
+
+/* โชว์ตัวเลือกงานย่อยเฉพาะหมวดที่ช่างติ๊กไว้ */
+function syncSubs(){
+  const cats = [...document.querySelectorAll('#rcats .chip.on')].map(c=>c.dataset.slug);
+  let shown = 0;
+  document.querySelectorAll('#rsubs .chip').forEach(c=>{
+    const on = cats.includes(c.dataset.cat);
+    c.style.display = on ? '' : 'none';
+    if(on) shown++; else c.classList.remove('on');
+  });
+  document.getElementById('rsubbox').style.display = shown ? 'block' : 'none';
 }
 
 function markDoc(boxId){
@@ -181,9 +204,12 @@ function editProfile(){ prefillRegister(); go('preg'); }
 async function register(){
   const name = document.getElementById('rname').value.trim();
   const cats = [...document.querySelectorAll('#rcats .chip.on')].map(c=>c.dataset.slug);
+  const subs = [...document.querySelectorAll('#rsubs .chip.on')].map(c=>c.dataset.slug);
   const tams = [...document.querySelectorAll('#rtambons .chip.on')].map(c=>+c.dataset.id);
   if(name.length < 2) return alert('ใส่ชื่อที่แสดงให้ลูกค้าเห็นก่อนครับ');
   if(!cats.length) return alert('เลือกหมวดงานที่รับอย่างน้อย 1 หมวดครับ');
+  if(document.getElementById('rsubbox').style.display !== 'none' && !subs.length)
+    return alert('เลือกด้วยครับว่ารับงานด่วนแบบไหนบ้าง');
   if(!tams.length) return alert('เลือกตำบลที่รับงานอย่างน้อย 1 ตำบลครับ');
   const btn = document.getElementById('regbtn');
   const wasProvider = state.me.is_provider;
@@ -194,7 +220,7 @@ async function register(){
       phone: document.getElementById('rphone').value.trim() || null,
       bio: document.getElementById('rbio').value.trim() || null,
       promptpay_id: document.getElementById('rpromptpay').value.trim() || null,
-      category_slugs: cats, tambon_ids: tams,
+      category_slugs: cats, subcategory_slugs: subs, tambon_ids: tams,
       ...state.docs,
     }});
     await refreshMe();

@@ -18,7 +18,7 @@ INSERT INTO service_categories (slug, name_th, icon, active) VALUES
   ('ac-cleaning',  'ช่างแอร์',           '❄️', true),
   ('gardening',    'งานสวน/ตัดหญ้า',     '🌿', true),
   ('housekeeping', 'แม่บ้าน',            '🧹', true),
-  ('emergency',    'งานฉุกเฉิน 24 ชม.',  '🚨', true)
+  ('emergency',    'งานด่วน 24 ชม.',  '🚨', true)
 ON CONFLICT (slug) DO UPDATE
   SET name_th = EXCLUDED.name_th, icon = EXCLUDED.icon, active = true;
 
