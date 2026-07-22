@@ -2,12 +2,20 @@
 import base64
 import hashlib
 import hmac
+import logging
 
 import httpx
 
 from .config import settings
 
 API = "https://api.line.me/v2/bot"
+log = logging.getLogger("line_api")
+
+
+def token_ready() -> bool:
+    """token ใช้งานได้จริงไหม (ยังไม่ตั้ง/เป็นข้อความ placeholder = ส่งไม่ได้)"""
+    tok = settings.line_channel_access_token
+    return bool(tok) and tok != "changeme" and tok.isascii()
 
 
 def verify_signature(body: bytes, signature: str) -> bool:
@@ -22,6 +30,9 @@ def _headers() -> dict:
 
 
 async def reply(reply_token: str, messages: list[dict]) -> None:
+    if not token_ready():
+        log.warning("ยังไม่ได้ตั้ง LINE_CHANNEL_ACCESS_TOKEN — ตอบกลับไม่ได้")
+        return
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.post(
             f"{API}/message/reply", headers=_headers(),
@@ -32,6 +43,8 @@ async def reply(reply_token: str, messages: list[dict]) -> None:
 
 async def show_loading(chat_id: str, seconds: int = 30) -> None:
     """โชว์ animation "กำลังพิมพ์..." ในแชทระหว่างรอ AI ตอบ (best effort)"""
+    if not token_ready():
+        return
     try:
         async with httpx.AsyncClient(timeout=5) as client:
             await client.post(
@@ -44,6 +57,9 @@ async def show_loading(chat_id: str, seconds: int = 30) -> None:
 
 async def push(to: str, messages: list[dict]) -> None:
     """ส่งข้อความหา user, group หรือ room id"""
+    if not token_ready():
+        log.warning("ยังไม่ได้ตั้ง LINE_CHANNEL_ACCESS_TOKEN — ส่งข้อความไม่ได้")
+        return
     async with httpx.AsyncClient(timeout=10) as client:
         r = await client.post(
             f"{API}/message/push", headers=_headers(),

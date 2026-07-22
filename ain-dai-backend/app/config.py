@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # .env อยู่ที่ราก ain-dai-backend — อ้างแบบ absolute เผื่อ cwd ไม่ตรง
 ENV_FILE = Path(__file__).resolve().parent.parent / ".env"
@@ -37,8 +37,7 @@ class Settings(BaseSettings):
     # ความถี่ตรวจ auto-release (วินาที)
     auto_release_interval: int = 600
 
-    class Config:
-        env_file = str(ENV_FILE)
+    model_config = SettingsConfigDict(env_file=str(ENV_FILE), extra="ignore")
 
 
 settings = Settings()

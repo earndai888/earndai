@@ -514,7 +514,7 @@ async def get_settings(_: bool = Admin):
         "dev_mode": settings.dev_mode,
         "checks": [
             {"key": "LINE_CHANNEL_ACCESS_TOKEN", "label": "บอท LINE ส่งข้อความ/แจ้งเตือน",
-             "ok": settings.line_channel_access_token not in ("", "changeme")},
+             "ok": line_api.token_ready()},
             {"key": "LINE_CHANNEL_SECRET", "label": "ตรวจลายเซ็น webhook",
              "ok": settings.line_channel_secret not in ("", "changeme")},
             {"key": "LIFF_ID", "label": "เปิดหน้าเว็บในแอป LINE (ล็อกอินจริง)", "ok": liff_ok},
