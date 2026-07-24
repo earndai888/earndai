@@ -57,9 +57,22 @@
     <div class="vt" id="vtxt">ไม่ถนัดพิมพ์? กดอัดเสียงเล่างาน แนบให้ช่างฟังได้เลย</div>
   </div>
   <div id="voiceplay" style="margin:0 18px"></div>
+  <label class="f">รูปหน้างาน * (อย่างน้อย 2 รูป)</label>
   <div class="photo" onclick="document.getElementById('photoinput').click()">📷 ถ่ายรูปหน้างาน (แตะเพื่อเลือกรูป)</div>
   <input type="file" id="photoinput" accept="image/*" multiple style="display:none" onchange="addPhotos(this.files)">
+  <div class="note" id="photohint" style="margin:-2px 18px 8px">ยิ่งเห็นชัด ช่างยิ่งประเมินราคาแม่น เตรียมของมาถูก</div>
   <div class="thumbs" id="photothumbs"></div>
+
+  <label class="f">ตำแหน่งบ้าน *</label>
+  <div class="photo" id="pinbox" onclick="pinLocation()">📍 ปักหมุดตำแหน่งบ้าน (แตะเพื่อใช้ตำแหน่งปัจจุบัน)</div>
+  <div class="note" style="margin:-2px 18px 8px">ช่างที่รับงานแล้วเท่านั้นที่เห็นแผนที่ เพื่อเดินทางไปถูกบ้าน</div>
+  <label class="f">จุดสังเกตบ้าน (ให้ช่างหาง่าย)</label>
+  <input class="inp" id="landmark" maxlength="200" placeholder="เช่น บ้านสีฟ้า ตรงข้ามวัด มีต้นมะม่วงใหญ่หน้าบ้าน">
+
+  <label class="f">เบอร์ติดต่อหน้างาน *</label>
+  <input class="inp" id="jobphone" inputmode="tel" maxlength="20" placeholder="08xxxxxxxx">
+  <div class="note" style="margin:-2px 18px 8px">🔒 ช่างไม่เห็นเบอร์นี้ — เก็บไว้ให้ทีมงานติดต่อพี่กรณีจำเป็นเท่านั้น</div>
+
   <label class="f">งบประมาณ (บาท)</label>
   <div class="row2">
     <input class="inp" id="bmin" placeholder="ต่ำสุด เช่น 300" inputmode="numeric">
@@ -164,7 +177,26 @@
 <script src="/static/common.js"></script>
 <script>
 const state = {job:null, bids:[], chosen:null, paymentId:null,
-               photos:[], voiceUrl:null, rating:0};
+               photos:[], voiceUrl:null, rating:0, lat:null, lng:null};
+
+/* ปักหมุดตำแหน่งบ้านด้วย GPS ของเครื่อง (ไม่ต้องใช้ Google Maps API key) */
+function pinLocation(){
+  const box = document.getElementById('pinbox');
+  if(!navigator.geolocation) return alert('เครื่องนี้ใช้ตำแหน่งไม่ได้ครับ ลองกรอกจุดสังเกตบ้านแทน');
+  box.textContent = '⏳ กำลังหาตำแหน่ง…';
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      state.lat = +pos.coords.latitude.toFixed(6);
+      state.lng = +pos.coords.longitude.toFixed(6);
+      box.innerHTML = `✅ ปักหมุดแล้ว <a href="https://www.google.com/maps/search/?api=1&query=${state.lat},${state.lng}" target="_blank" onclick="event.stopPropagation()" style="color:var(--green-dark)">ดูบนแผนที่</a> <span style="font-size:12px">(แตะเพื่อปักใหม่)</span>`;
+      box.style.borderColor = 'var(--green)'; box.style.background = 'var(--green-pale)';
+    },
+    err => {
+      box.textContent = '📍 ปักหมุดตำแหน่งบ้าน (แตะเพื่อใช้ตำแหน่งปัจจุบัน)';
+      alert('เปิดตำแหน่งไม่ได้: ' + err.message + '\nกรุณาอนุญาตให้ใช้ตำแหน่ง หรือกรอกจุดสังเกตบ้านแทนครับ');
+    },
+    {enableHighAccuracy: true, timeout: 10000});
+}
 
 function activeJobId(){ return localStorage.getItem('aindai_job'); }
 function clearActive(){ localStorage.removeItem('aindai_job'); go('home'); }
@@ -321,6 +353,11 @@ async function addPhotos(files){
       box.innerHTML += `<img src="${url}" alt="รูปหน้างาน">`;
     }catch(e){ alert('อัปโหลดรูปไม่สำเร็จ: '+e.message); }
   }
+  const hint = document.getElementById('photohint');
+  hint.textContent = state.photos.length >= 2
+    ? `✅ แนบแล้ว ${state.photos.length} รูป`
+    : `แนบอีก ${2 - state.photos.length} รูป (ยิ่งเห็นชัด ช่างยิ่งประเมินราคาแม่น)`;
+  hint.style.color = state.photos.length >= 2 ? 'var(--green-dark)' : '';
 }
 
 /* ── สร้างงาน ── */
@@ -333,6 +370,11 @@ async function submitJob(){
   const tSel = document.getElementById('tambonsel');
   const desc = document.getElementById('desc').value.trim();
   if(!desc && !state.voiceUrl) return alert('เล่ารายละเอียดงาน (พิมพ์หรืออัดเสียง) ก่อนครับ');
+  if(state.photos.length < 2) return alert('แนบรูปหน้างานอย่างน้อย 2 รูปก่อนครับ ช่างจะได้ประเมินราคาแม่น');
+  const phone = document.getElementById('jobphone').value.trim();
+  if(phone.replace(/\D/g,'').length < 9) return alert('กรอกเบอร์ติดต่อหน้างานให้ถูกต้องครับ');
+  if(!state.lat && !document.getElementById('landmark').value.trim())
+    return alert('ปักหมุดตำแหน่งบ้าน หรือกรอกจุดสังเกตบ้าน อย่างใดอย่างหนึ่งครับ ช่างจะได้ไปถูกที่');
   btn.disabled = true; btn.textContent = 'กำลังส่งประกาศ…';
   try{
     const r = await api('/jobs', {method:'POST', body:{
@@ -343,12 +385,15 @@ async function submitJob(){
       budget_min: parseFloat(document.getElementById('bmin').value) || null,
       budget_max: parseFloat(document.getElementById('bmax').value) || null,
       preferred_time: document.getElementById('daysel').value + ' ' + document.getElementById('timesel').value,
+      contact_phone: phone, landmark: document.getElementById('landmark').value.trim() || null,
+      lat: state.lat, lng: state.lng,
     }});
     localStorage.setItem('aindai_job', r.job_id);
-    state.photos = []; state.voiceUrl = null;
+    state.photos = []; state.voiceUrl = null; state.lat = null; state.lng = null;
     document.getElementById('photothumbs').innerHTML = '';
     document.getElementById('voiceplay').innerHTML = '';
     document.getElementById('desc').value='';
+    document.getElementById('landmark').value=''; document.getElementById('jobphone').value='';
     await openActiveJob();
   }catch(e){ alert('ส่งไม่สำเร็จ: '+e.message); }
   finally{ btn.disabled=false; btn.textContent='ส่งประกาศหาช่าง'; }

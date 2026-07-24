@@ -50,6 +50,7 @@ async def lifespan(app: FastAPI):
     try:
         await catalog.ensure_subcategories()  # กลุ่มงานย่อยของงานด่วน 24 ชม.
         await catalog.ensure_provider_kyc()   # คอลัมน์ยืนยันตัวตนช่าง
+        await catalog.ensure_job_fields()     # เบอร์ติดต่อ/พิกัด/จุดสังเกตหน้างาน
         await audit.ensure_table()            # ประวัติการแก้ไข/ลบของแอดมิน
         # เอกสารบัตร ปชช. ที่เคยเก็บในโฟลเดอร์สาธารณะ → ย้ายเข้าห้องนิรภัย
         await vault.migrate_existing(db.get_pool())

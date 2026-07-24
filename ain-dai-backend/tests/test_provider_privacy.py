@@ -12,8 +12,11 @@ from app import contact_guard
 from app.routers import jobs
 
 # ฟิลด์ที่ห้ามโผล่ใน endpoint ฝั่งลูกค้าเด็ดขาด
+# หมายเหตุ: contact_phone (เบอร์หน้างานของลูกค้าเอง) ไม่นับ — คนละเรื่องกับเบอร์ช่าง
 SECRET_FIELDS = ["promptpay_id", "national_id", "full_name",
-                 "face_scan_urls", "contract_signature_url", "phone"]
+                 "face_scan_urls", "contract_signature_url"]
+# เบอร์ช่าง: ต้องไม่มี u.phone / pu.phone / provider_phone — แต่ยอมให้ contact_phone
+PROVIDER_PHONE_TOKENS = ["u.phone", "pu.phone", "provider_phone", "p.phone"]
 
 # endpoint ที่ลูกค้าเรียกได้ (ไม่ใช่ /me ของช่างเอง และไม่ใช่ฝั่งแอดมิน)
 CUSTOMER_ENDPOINTS = [jobs.list_bids, jobs.top_providers, jobs.job_detail, jobs.my_jobs]
@@ -26,6 +29,8 @@ def test_endpoint_ลูกค้าไม่ดึงข้อมูลลั�
     code = "\n".join(line.split("--")[0].split("#")[0] for line in src.splitlines())
     for field in SECRET_FIELDS:
         assert field not in code, f"{fn.__name__} ดึง {field} ซึ่งลูกค้าไม่ควรเห็น"
+    for token in PROVIDER_PHONE_TOKENS:
+        assert token not in code, f"{fn.__name__} ดึงเบอร์ช่าง ({token})"
 
 
 def test_รายการข้อเสนอส่งกลับเฉพาะชื่อกับรีวิว():

@@ -481,7 +481,7 @@ async def list_jobs(tab: str = Query("new"), _: bool = Admin):
     rows = await db.get_pool().fetch("""
         SELECT j.id, j.title, j.status, j.description, j.photos, j.voice_note_url,
                j.budget_min, j.budget_max, j.preferred_time, j.created_at, j.start_otp,
-               j.otp_verified_at,
+               j.otp_verified_at, j.contact_phone, j.landmark, j.lat, j.lng,
                c.name_th AS category, c.icon, t.name AS tambon,
                cu.display_name AS customer_name, cu.phone AS customer_phone,
                pu.display_name AS provider_name, pu.phone AS provider_phone,

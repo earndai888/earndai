@@ -72,3 +72,13 @@ async def ensure_provider_kyc() -> None:
              ADD COLUMN IF NOT EXISTS contract_version       text,
              ADD COLUMN IF NOT EXISTS contract_signed_at     timestamptz"""
     )
+
+
+async def ensure_job_fields() -> None:
+    """คอลัมน์หน้างานเพิ่มเติม — ให้ช่างไปถึงบ้านและติดต่อได้
+    เบอร์ติดต่อ+พิกัด+จุดสังเกต เห็นเฉพาะแอดมินและช่างที่รับงานแล้ว (กัน bypass)"""
+    await db.get_pool().execute(
+        """ALTER TABLE jobs
+             ADD COLUMN IF NOT EXISTS contact_phone text,
+             ADD COLUMN IF NOT EXISTS landmark      text"""
+    )   # lat/lng มีอยู่แล้วใน schema เดิม

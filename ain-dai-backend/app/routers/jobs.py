@@ -312,6 +312,16 @@ async def secure_file(name: str, user: dict = Depends(current_user)):
 
 # ── สร้างงาน ────────────────────────────────────────────
 
+MIN_JOB_PHOTOS = 2   # รูปหน้างานขั้นต่ำ — ช่างจะได้ประเมินงานและเตรียมของถูก
+
+
+def map_url(lat, lng) -> str | None:
+    """พิกัด → ลิงก์เปิด Google Maps (ไม่ต้องใช้ API key/ไม่มีค่าใช้จ่าย)"""
+    if lat is None or lng is None:
+        return None
+    return f"https://www.google.com/maps/search/?api=1&query={lat},{lng}"
+
+
 class JobIn(BaseModel):
     category_slug: str
     subcategory_slug: str | None = None   # งานด่วน 24 ชม. = ต้องบอกว่าด่วนแบบไหน
@@ -325,6 +335,11 @@ class JobIn(BaseModel):
     preferred_date: date | None = None
     preferred_time: str | None = None
     address_full: str | None = None
+    # ── หน้างาน: ให้ช่างไปถึงและติดต่อได้ (เห็นเฉพาะช่างที่รับงานแล้ว) ──
+    contact_phone: str = Field(min_length=9, max_length=20)
+    landmark: str | None = Field(default=None, max_length=200)   # จุดสังเกตบ้าน
+    lat: float | None = Field(default=None, ge=-90, le=90)
+    lng: float | None = Field(default=None, ge=-180, le=180)
 
 
 @router.post("/jobs", status_code=201)
@@ -342,15 +357,26 @@ async def create_job(body: JobIn, user: dict = Depends(current_user)):
             raise HTTPException(400, "ไม่รู้จักประเภทงานย่อยนี้")
     elif subcategories_of(body.category_slug):
         raise HTTPException(400, "หมวดนี้ต้องเลือกประเภทงานด้วยครับ")
+    # เบอร์ติดต่อหน้างาน — ตรวจให้เป็นเบอร์ไทยจริง (ช่างที่รับงานโทรหาลูกค้าได้)
+    contact_phone = thai_id.normalize_phone(body.contact_phone)
+    if not contact_phone:
+        raise HTTPException(400, "เบอร์ติดต่อหน้างานไม่ถูกต้องครับ")
+    # รูปหน้างานต้องมาจากการอัปโหลดของระบบ และครบขั้นต่ำ
+    photos = [p for p in body.photos if p.startswith("/uploads/")]
+    if len(photos) < MIN_JOB_PHOTOS:
+        raise HTTPException(400, f"แนบรูปหน้างานอย่างน้อย {MIN_JOB_PHOTOS} รูปครับ "
+                                 "ช่างจะได้ประเมินงานและเตรียมของถูก")
     job = await pool.fetchrow(
         """INSERT INTO jobs (customer_id, category_id, subcategory_id, tambon_id, title, description,
              photos, voice_note_url, budget_min, budget_max, preferred_date,
-             preferred_time, address_full, status, expires_at)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'bidding', now() + interval '72 hours')
+             preferred_time, address_full, contact_phone, landmark, lat, lng, status, expires_at)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'bidding',
+                   now() + interval '72 hours')
            RETURNING *""",
         user["id"], cat["id"], sub["id"] if sub else None, body.tambon_id, body.title,
-        body.description, body.photos, body.voice_note_url, body.budget_min, body.budget_max,
+        body.description, photos, body.voice_note_url, body.budget_min, body.budget_max,
         body.preferred_date, body.preferred_time, body.address_full,
+        contact_phone, body.landmark, body.lat, body.lng,
     )
     await broadcast_job(dict(job), cat["name_th"], sub["name_th"] if sub else None)
     return {"job_id": str(job["id"]), "status": job["status"]}
@@ -506,7 +532,8 @@ async def provider_jobs(user: dict = Depends(current_user)):
     )
     mine = await pool.fetch(
         """SELECT j.id, j.title, j.status, b.price, c.icon, t.name AS tambon_name,
-                  j.photos, j.voice_note_url, j.description
+                  j.photos, j.voice_note_url, j.description,
+                  j.address_full, j.landmark, j.lat, j.lng
              FROM jobs j
              JOIN bids b ON b.id = j.assigned_bid_id AND b.provider_id = $1
              JOIN service_categories c ON c.id = j.category_id
@@ -516,8 +543,13 @@ async def provider_jobs(user: dict = Depends(current_user)):
         prov["id"],
     )
     fix = lambda r: dict(r) | {"id": str(r["id"])}
+    def mine_row(r):
+        d = fix(r)
+        d["map_url"] = map_url(r["lat"], r["lng"])
+        d.pop("lat", None); d.pop("lng", None)
+        return d
     return {"open": [fix(r) | {"created_at": r["created_at"].isoformat()} for r in open_jobs],
-            "mine": [fix(r) for r in mine]}
+            "mine": [mine_row(r) for r in mine]}
 
 
 @router.get("/jobs/{job_id}")
@@ -555,6 +587,17 @@ async def job_detail(job_id: str, user: dict = Depends(current_user)):
     review = await pool.fetchrow("SELECT rating, comment FROM reviews WHERE job_id = $1", job["id"])
     bids_count = await pool.fetchval(
         "SELECT count(*) FROM bids WHERE job_id = $1 AND status IN ('active','selected')", job["id"])
+    # ที่อยู่/จุดสังเกต/พิกัด เปิดให้เฉพาะลูกค้าเจ้าของงาน และช่างที่ถูกเลือกแล้ว
+    # เบอร์โทรลูกค้า "เห็นเฉพาะแอดมิน" — ช่างประสานผ่านระบบ ไม่โทรตรง (กัน bypass)
+    contact = None
+    if is_customer or is_provider:
+        contact = {
+            "address_full": job["address_full"],
+            "landmark": job["landmark"],
+            "map_url": map_url(job["lat"], job["lng"]),
+            # ลูกค้าเห็นเบอร์ตัวเองได้ ช่างไม่เห็น
+            "contact_phone": job["contact_phone"] if is_customer else None,
+        }
     return {
         "id": str(job["id"]), "title": job["title"], "status": job["status"],
         "description": job["description"], "photos": job["photos"] or [],
@@ -563,6 +606,7 @@ async def job_detail(job_id: str, user: dict = Depends(current_user)):
         "preferred_time": job["preferred_time"],
         "category_name": job["sub_name"] or job["category_name"], "icon": job["icon"],
         "tambon_name": job["tambon_name"], "bids_count": bids_count,
+        "contact": contact,
         "is_customer": is_customer, "is_provider": is_provider,
         "otp": job["start_otp"] if is_customer and job["status"] == "assigned" else None,
         "selected": {"display_name": selected["display_name"], "price": selected["price"],

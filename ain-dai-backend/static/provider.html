@@ -606,6 +606,14 @@ async function openJob(id){
         ${j.voice_note_url?`<audio controls src="${j.voice_note_url}"></audio>`:''}
         ${j.photos&&j.photos.length?`<div class="thumbs" style="margin:8px 0 0">${j.photos.map(p=>`<img src="${p}">`).join('')}</div>`:''}
       </div>`;
+    // ช่างที่รับงานแล้วเห็นวิธีไปถึงบ้าน (ลูกค้าที่ยังแค่ประมูลไม่เห็น)
+    if(j.contact && (j.contact.map_url || j.contact.landmark || j.contact.address_full)){
+      html += `<div class="card"><div style="font-family:'Mitr';margin-bottom:6px">📍 ไปถึงบ้านลูกค้า</div>
+        ${j.contact.address_full?`<div style="font-size:13.5px;margin-bottom:4px">${esc(j.contact.address_full)}</div>`:''}
+        ${j.contact.landmark?`<div class="note" style="text-align:left;margin:0 0 8px">จุดสังเกต: ${esc(j.contact.landmark)}</div>`:''}
+        ${j.contact.map_url?`<a class="btn ghost" href="${j.contact.map_url}" target="_blank">🗺️ เปิดแผนที่นำทาง</a>`:''}
+      </div>`;
+    }
     if(j.status==='bidding' || j.status==='open'){
       html += `
         <div class="escrow">💰 <span>งานนี้เปิดรับข้อเสนอ — ใส่ราคาที่คุณรับได้ แล้วส่งให้ลูกค้าเลือก</span></div>
