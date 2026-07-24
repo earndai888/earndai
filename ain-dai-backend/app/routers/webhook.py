@@ -4,8 +4,10 @@ from urllib.parse import parse_qsl
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
-from .. import ai_chat, db, flex, line_api
+from .. import ai_chat, db, flex, line_api, promptpay
+from ..config import settings
 from ..intent import classify, classify_sub
+from .jobs import do_approve_job, do_confirm_payment, do_select_bid
 
 router = APIRouter()
 log = logging.getLogger("webhook")
@@ -47,6 +49,8 @@ async def handle_event(event: dict) -> None:
             ask_sub = flex.subcategory_quick_reply(slug) if not sub else None
             await line_api.reply(reply_token, [
                 ask_sub or flex.open_form_message(slug, subcategory_slug=sub)])
+        elif data.get("a"):
+            await handle_transaction_postback(reply_token, src.get("userId"), data)
         return
 
     # บอทถูกเชิญเข้ากลุ่ม/ห้อง → แนะนำวิธีผูกหมวดงาน
@@ -159,6 +163,54 @@ async def handle_group_command(reply_token: str, group_id: str | None, text: str
             tambon["id"], group_id)
         await line_api.reply(reply_token, [{"type": "text",
             "text": f"✅ ผูกกลุ่มนี้กับ ต.{tambon['name']} แล้ว\nงานใหม่ในตำบลนี้จะแจ้งเข้ากลุ่มอัตโนมัติครับ"}])
+
+
+async def handle_transaction_postback(reply_token: str, line_user_id: str | None, data: dict) -> None:
+    """ปุ่มในการ์ดแชท: เลือกช่าง (pick) → จ่ายเงิน (paid) → ยืนยันงาน (confirm)
+    ทำธุรกรรมจริงในแชท โดยเช็คว่าเป็นลูกค้าเจ้าของงานก่อนทุกครั้ง"""
+    if not line_user_id:
+        return
+    pool = db.get_pool()
+    me = await pool.fetchrow("SELECT id FROM users WHERE line_user_id = $1", line_user_id)
+    if not me:
+        return
+    action = data.get("a")
+    try:
+        if action == "pick":                      # ลูกค้าเลือกช่าง → ส่งการ์ดจ่ายเงิน
+            r = await do_select_bid(pool, data["job"], data["bid"], me["id"])
+            prov = await pool.fetchrow(
+                """SELECT u.display_name FROM bids b JOIN providers p ON p.id = b.provider_id
+                     JOIN users u ON u.id = p.user_id WHERE b.id = $1::uuid""", data["bid"])
+            card = flex.payment_card(r["payment_id"], r["amount"],
+                                     prov["display_name"] if prov else "ช่าง",
+                                     f"/api/payments/{r['payment_id']}/qr.png")
+            msgs = [{"type": "text",
+                     "text": f"เลือกช่าง {prov['display_name'] if prov else ''} เรียบร้อยครับ 👍 "
+                             "สแกน QR ด้านล่างเพื่อจ่ายเข้ากระเป๋ากลางได้เลย"}, card]
+            if not settings.public_base_url:   # โหมดยังไม่ตั้งโดเมน — ส่ง payload ให้ก่อน
+                msgs.append({"type": "text", "text": "PromptPay: " +
+                             promptpay.payload(settings.promptpay_id, float(r["amount"]))})
+            await line_api.reply(reply_token, msgs)
+
+        elif action == "paid":                    # ลูกค้ากดยืนยันโอน → escrow + OTP
+            r = await do_confirm_payment(pool, data["pid"], me["id"])
+            if not r:
+                await line_api.reply(reply_token, [{"type": "text",
+                    "text": "รายการนี้ชำระไปแล้ว หรือไม่พบรายการครับ"}])
+                return
+            await line_api.reply(reply_token, [{"type": "text",
+                "text": f"รับเงินเข้ากระเป๋ากลางแล้วครับ 🛡️\n\n"
+                        f"รหัสเริ่มงานของพี่คือ  {r['otp']}\n"
+                        "บอกรหัสนี้กับช่างตอนช่างมาถึงบ้าน เพื่อยืนยันว่าช่างมาทำงานจริง "
+                        "งานเสร็จผมจะส่งปุ่มให้พี่กดยืนยันครับ"}])
+
+        elif action == "confirm":                 # ลูกค้ายืนยันจบงาน → ปล่อยเงิน
+            await do_approve_job(pool, data["job"], me["id"])
+            await line_api.reply(reply_token, [{"type": "text",
+                "text": "ขอบคุณครับพี่ 🙏 ยืนยันงานเรียบร้อย ระบบกำลังโอนเงินให้ช่าง\n"
+                        "ฝากรีวิวช่างในแอปเพื่อช่วยช่างดีๆ ในชุมชนของเราด้วยนะครับ ⭐"}])
+    except HTTPException as e:
+        await line_api.reply(reply_token, [{"type": "text", "text": f"ทำรายการไม่สำเร็จ: {e.detail}"}])
 
 
 async def upsert_user(line_user_id: str | None) -> None:

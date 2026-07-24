@@ -460,6 +460,20 @@ async def create_bid(job_id: str, body: BidIn, user: dict = Depends(current_user
            RETURNING id""",
         job["id"], provider["id"], body.price, body.message, body.available_at,
     )
+    # ส่งการ์ดข้อเสนอเข้าแชทลูกค้า — เลือกช่างได้เลยในแชท
+    prov_info = await pool.fetchrow(
+        """SELECT u.display_name, p.rating_avg, p.rating_count
+             FROM providers p JOIN users u ON u.id = p.user_id WHERE p.id = $1""", provider["id"])
+    customer = await pool.fetchrow("SELECT line_user_id FROM users WHERE id = $1", job["customer_id"])
+    if customer and prov_info:
+        try:
+            card = flex.bid_card(
+                {"id": str(bid["id"]), "job_id": str(job["id"]), "price": body.price,
+                 "message": body.message, "available_at": body.available_at},
+                dict(prov_info), job["title"])
+            await line_api.push(customer["line_user_id"], [card])
+        except Exception:
+            log.warning("ส่งการ์ดข้อเสนอเข้าแชทลูกค้าไม่สำเร็จ (งาน %s)", job["id"])
     return {"bid_id": str(bid["id"])}
 
 
@@ -635,50 +649,55 @@ async def payment_qr(payment_id: str):
 
 # ── เลือกช่าง + จ่ายเงิน escrow ─────────────────────────
 
-@router.post("/jobs/{job_id}/select/{bid_id}")
-async def select_bid(job_id: str, bid_id: str, user: dict = Depends(current_user)):
-    pool = db.get_pool()
+async def do_select_bid(pool, job_id: str, bid_id: str, customer_id) -> dict:
+    """ลูกค้าเลือกช่าง → สร้างรายการชำระเงิน (ใช้ร่วมทั้ง REST และแชท LINE)"""
     job = await pool.fetchrow(
-        "SELECT * FROM jobs WHERE id = $1::uuid AND customer_id = $2", job_id, user["id"])
+        "SELECT * FROM jobs WHERE id = $1::uuid AND customer_id = $2", job_id, customer_id)
     if not job or job["status"] != "bidding":
         raise HTTPException(400, "เลือกช่างไม่ได้ในสถานะนี้")
     bid = await pool.fetchrow(
         "SELECT * FROM bids WHERE id = $1::uuid AND job_id = $2", bid_id, job["id"])
     if not bid:
         raise HTTPException(404, "ไม่พบข้อเสนอนี้")
+    # เลือกช่างใหม่โดยยังไม่จ่าย = ยกเลิกรายการชำระค้างเดิม แล้วออกใหม่
+    await pool.execute(
+        "UPDATE payments SET status='cancelled' WHERE job_id=$1 AND status='pending'", job["id"])
     payment = await pool.fetchrow(
         """INSERT INTO payments (job_id, amount, method) VALUES ($1, $2, 'promptpay_qr')
            RETURNING id""",
-        job["id"], bid["price"],
-    )
+        job["id"], bid["price"])
     await pool.execute("UPDATE jobs SET assigned_bid_id = $1 WHERE id = $2", bid["id"], job["id"])
-    return {"payment_id": str(payment["id"]), "amount": str(bid["price"]),
+    return {"payment_id": str(payment["id"]), "amount": bid["price"], "bid": bid, "job": job}
+
+
+@router.post("/jobs/{job_id}/select/{bid_id}")
+async def select_bid(job_id: str, bid_id: str, user: dict = Depends(current_user)):
+    r = await do_select_bid(db.get_pool(), job_id, bid_id, user["id"])
+    return {"payment_id": r["payment_id"], "amount": str(r["amount"]),
             "message": "สแกนจ่าย PromptPay แล้วยืนยันการโอน"}
 
 
-@router.post("/payments/{payment_id}/confirm")
-async def confirm_payment(payment_id: str, user: dict = Depends(current_user)):
-    """MVP: ลูกค้ากดยืนยันโอน + แอดมินตรวจสลิป | เฟส 2: gateway ยิง callback แทน
-    จ่ายแล้ว → สุ่ม OTP, สถานะ assigned, แจ้งช่าง"""
-    pool = db.get_pool()
+async def do_confirm_payment(pool, payment_id: str, customer_id=None) -> dict | None:
+    """ยืนยันการชำระ → escrow, สุ่ม OTP, สถานะ assigned, แจ้งช่าง
+    customer_id: ใส่เพื่อกันคนอื่นยืนยันแทน (ฝั่งแชท) — None = ไม่เช็ค (REST เดิม)"""
     payment = await pool.fetchrow(
-        """UPDATE payments SET status = 'paid', paid_at = now()
-            WHERE id = $1::uuid AND status = 'pending' RETURNING *""",
-        payment_id,
-    )
-    if not payment:
-        raise HTTPException(400, "ไม่พบรายการหรือจ่ายไปแล้ว")
+        "SELECT * FROM payments WHERE id = $1::uuid", payment_id)
+    if not payment or payment["status"] != "pending":
+        return None
+    if customer_id is not None:
+        owner = await pool.fetchval("SELECT customer_id FROM jobs WHERE id = $1", payment["job_id"])
+        if owner != customer_id:
+            raise HTTPException(403, "ไม่ใช่งานของคุณ")
+    await pool.execute(
+        "UPDATE payments SET status='paid', paid_at=now() WHERE id=$1", payment["id"])
     otp = f"{secrets.randbelow(10000):04d}"
     job = await pool.fetchrow(
-        """UPDATE jobs SET status = 'assigned', start_otp = $2
-            WHERE id = $1 RETURNING *""",
-        payment["job_id"], otp,
-    )
-    await pool.execute("UPDATE bids SET status = 'selected' WHERE id = $1", job["assigned_bid_id"])
+        "UPDATE jobs SET status='assigned', start_otp=$2 WHERE id=$1 RETURNING *",
+        payment["job_id"], otp)
+    await pool.execute("UPDATE bids SET status='selected' WHERE id=$1", job["assigned_bid_id"])
     await pool.execute(
-        "UPDATE bids SET status = 'rejected' WHERE job_id = $1 AND id <> $2 AND status = 'active'",
+        "UPDATE bids SET status='rejected' WHERE job_id=$1 AND id<>$2 AND status='active'",
         job["id"], job["assigned_bid_id"])
-    # แจ้งช่างที่ถูกเลือก
     prov = await pool.fetchrow(
         """SELECT u.line_user_id FROM bids b
              JOIN providers p ON p.id = b.provider_id JOIN users u ON u.id = p.user_id
@@ -690,7 +709,16 @@ async def confirm_payment(payment_id: str, user: dict = Depends(current_user)):
                 "text": f"🎉 คุณได้งาน \"{job['title']}\" แล้ว!\nลูกค้าจ่ายเงินเข้าระบบเรียบร้อย เงินพักปลอดภัยใน escrow\n\nเมื่อถึงหน้างาน ขอรหัส 4 หลักจากลูกค้าแล้วกรอกในระบบเพื่อเริ่มงานครับ"}])
         except Exception:
             pass
-    return {"job_id": str(job["id"]), "status": "assigned", "customer_otp": otp}
+    return {"job": job, "otp": otp}
+
+
+@router.post("/payments/{payment_id}/confirm")
+async def confirm_payment(payment_id: str, user: dict = Depends(current_user)):
+    """MVP: ลูกค้ากดยืนยันโอน + แอดมินตรวจสลิป | เฟส 2: gateway ยิง callback แทน"""
+    r = await do_confirm_payment(db.get_pool(), payment_id, user["id"])
+    if not r:
+        raise HTTPException(400, "ไม่พบรายการหรือจ่ายไปแล้ว")
+    return {"job_id": str(r["job"]["id"]), "status": "assigned", "customer_otp": r["otp"]}
 
 
 # ── OTP เริ่มงาน / เสร็จงาน / ยืนยัน ────────────────────
@@ -701,14 +729,23 @@ class OtpIn(BaseModel):
 
 @router.post("/jobs/{job_id}/start")
 async def verify_otp(job_id: str, body: OtpIn, user: dict = Depends(current_user)):
-    job = await db.get_pool().fetchrow(
+    pool = db.get_pool()
+    job = await pool.fetchrow(
         """UPDATE jobs SET status = 'in_progress', otp_verified_at = now()
             WHERE id = $1::uuid AND status = 'assigned' AND start_otp = $2
-           RETURNING id""",
+           RETURNING *""",
         job_id, body.otp,
     )
     if not job:
         raise HTTPException(400, "รหัสไม่ถูกต้องหรือสถานะงานไม่พร้อมเริ่ม")
+    customer = await pool.fetchrow("SELECT line_user_id FROM users WHERE id = $1", job["customer_id"])
+    if customer:
+        try:
+            await line_api.push(customer["line_user_id"], [{
+                "type": "text",
+                "text": f"🔨 ช่างเริ่มงาน \"{job['title']}\" แล้วครับ\nเสร็จแล้วช่างจะส่งงานให้พี่ตรวจและกดยืนยันครับ"}])
+        except Exception:
+            pass
     return {"status": "in_progress"}
 
 
@@ -730,34 +767,49 @@ async def complete_job(job_id: str, body: CompleteIn, user: dict = Depends(curre
     customer = await pool.fetchrow("SELECT line_user_id FROM users WHERE id = $1", job["customer_id"])
     if customer:
         try:
-            await line_api.push(customer["line_user_id"], [{
-                "type": "text",
-                "text": f"✅ ช่างแจ้งว่างาน \"{job['title']}\" เสร็จแล้ว\nตรวจงานแล้วกดยืนยันในแอปเพื่อปล่อยเงินให้ช่างครับ (ถ้าไม่กดภายใน 24 ชม. ระบบยืนยันให้อัตโนมัติ)"}])
+            await line_api.push(customer["line_user_id"], [flex.job_done_card(str(job["id"]), job["title"])])
         except Exception:
             pass
     return {"status": "done"}
 
 
-@router.post("/jobs/{job_id}/approve")
-async def approve_job(job_id: str, user: dict = Depends(current_user)):
-    pool = db.get_pool()
+async def do_approve_job(pool, job_id: str, customer_id) -> dict:
+    """ลูกค้ายืนยันจบงาน → สร้าง settlement, นับผลงาน, แจ้งช่าง (ใช้ร่วม REST + แชท)"""
     job = await pool.fetchrow(
         """UPDATE jobs SET status = 'confirmed'
             WHERE id = $1::uuid AND customer_id = $2 AND status = 'done' RETURNING *""",
-        job_id, user["id"],
-    )
+        job_id, customer_id)
     if not job:
         raise HTTPException(400, "ยืนยันไม่ได้ในสถานะนี้")
     settle = await create_settlement(job["id"])
-    # แต้มสะสมผู้จ้าง + นับผลงานช่าง
     await pool.execute(
         "INSERT INTO points_ledger (user_id, job_id, points, reason) VALUES ($1,$2,20,'job_completed')",
-        user["id"], job["id"])
+        customer_id, job["id"])
     await pool.execute(
         """UPDATE providers SET jobs_done = jobs_done + 1
             WHERE id = (SELECT provider_id FROM bids WHERE id = $1)""",
         job["assigned_bid_id"])
-    return {"status": "confirmed", "settlement": settle}
+    prov = await pool.fetchrow(
+        """SELECT u.line_user_id FROM bids b
+             JOIN providers p ON p.id = b.provider_id JOIN users u ON u.id = p.user_id
+            WHERE b.id = $1""", job["assigned_bid_id"])
+    if prov:
+        net = settle.get("provider_net") if isinstance(settle, dict) else None
+        try:
+            await line_api.push(prov["line_user_id"], [{
+                "type": "text",
+                "text": f"🎉 ลูกค้ายืนยันงาน \"{job['title']}\" แล้ว!\n"
+                        + (f"เงินส่วนของคุณ {net} บาท " if net else "")
+                        + "ระบบกำลังโอนเข้าพร้อมเพย์ที่ลงทะเบียนไว้ครับ ขอบคุณที่ช่วยดูแลคนในชุมชนนะครับ 🙏"}])
+        except Exception:
+            pass
+    return {"status": "confirmed", "settlement": settle, "job": job}
+
+
+@router.post("/jobs/{job_id}/approve")
+async def approve_job(job_id: str, user: dict = Depends(current_user)):
+    r = await do_approve_job(db.get_pool(), job_id, user["id"])
+    return {"status": "confirmed", "settlement": r["settlement"]}
 
 
 # ── รีวิวช่างหลังจบงาน ──────────────────────────────────
