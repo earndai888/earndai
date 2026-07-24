@@ -649,6 +649,30 @@ async def payment_qr(payment_id: str):
 
 # ── เลือกช่าง + จ่ายเงิน escrow ─────────────────────────
 
+async def pending_order(pool, customer_id) -> dict | None:
+    """งานล่าสุดที่ยังยกเลิกได้ (ยังไม่จ่ายเงิน) — ใช้โชว์ปุ่มยกเลิกในแชท"""
+    return await pool.fetchrow(
+        """SELECT id, title FROM jobs
+            WHERE customer_id = $1 AND status IN ('open','bidding')
+            ORDER BY created_at DESC LIMIT 1""",
+        customer_id)
+
+
+async def do_cancel_pending(pool, customer_id) -> str | None:
+    """ยกเลิกงานที่ค้างอยู่ (ก่อนจ่ายเงิน) → คืนชื่องานที่ยกเลิก หรือ None ถ้าไม่มี
+    ยกเลิกได้เฉพาะงานที่ยังไม่จ่าย — ถ้าจ่ายเข้า escrow แล้วต้องผ่านแอดมิน (มีเงินเกี่ยวข้อง)"""
+    job = await pending_order(pool, customer_id)
+    if not job:
+        return None
+    await pool.execute(
+        "UPDATE payments SET status='cancelled' WHERE job_id=$1 AND status='pending'", job["id"])
+    await pool.execute(
+        "UPDATE bids SET status='rejected' WHERE job_id=$1 AND status='active'", job["id"])
+    await pool.execute(
+        "UPDATE jobs SET status='cancelled', assigned_bid_id=NULL WHERE id=$1", job["id"])
+    return job["title"]
+
+
 async def do_select_bid(pool, job_id: str, bid_id: str, customer_id) -> dict:
     """ลูกค้าเลือกช่าง → สร้างรายการชำระเงิน (ใช้ร่วมทั้ง REST และแชท LINE)"""
     job = await pool.fetchrow(

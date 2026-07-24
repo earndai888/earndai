@@ -7,7 +7,17 @@ from fastapi import APIRouter, Header, HTTPException, Request
 from .. import ai_chat, db, flex, line_api, promptpay
 from ..config import settings
 from ..intent import classify, classify_sub
-from .jobs import do_approve_job, do_confirm_payment, do_select_bid
+from .jobs import (do_approve_job, do_cancel_pending, do_confirm_payment,
+                   do_select_bid, pending_order)
+
+# คำสั่งยกเลิก/เริ่มใหม่ที่ลูกค้าพิมพ์ได้ (นอกจากกดปุ่ม)
+CANCEL_WORDS = {"ยกเลิก", "ยกเลิกรายการ", "ยกเลิกรายการเดิม", "เริ่มใหม่",
+                "เริ่มต้นใหม่", "รายการใหม่", "ล้างแชท", "เคลียร์", "reset"}
+
+
+def is_cancel_command(text: str) -> bool:
+    t = text.strip().lower()
+    return t in CANCEL_WORDS or t.startswith("ยกเลิก") or t.startswith("เริ่มใหม่")
 
 router = APIRouter()
 log = logging.getLogger("webhook")
@@ -73,6 +83,15 @@ async def handle_event(event: dict) -> None:
         await upsert_user(user_id)
         text = event["message"]["text"]
 
+        # พิมพ์ "ยกเลิก"/"เริ่มใหม่" → ล้างบทสนทนาเดิม + ยกเลิกงานที่ค้าง
+        if is_cancel_command(text):
+            await handle_cancel(reply_token, user_id)
+            return
+
+        pool = db.get_pool()
+        me = await pool.fetchrow("SELECT id FROM users WHERE line_user_id = $1", user_id) if user_id else None
+        pending = await pending_order(pool, me["id"]) if me else None
+
         # AI ชั้นที่ 2: คุยโต้ตอบก่อน ค่อยส่งลิงก์เมื่อคุยรู้เรื่องแล้ว
         if ai_chat.enabled() and user_id:
             await line_api.show_loading(user_id)
@@ -88,6 +107,9 @@ async def handle_event(event: dict) -> None:
                     ask_sub = (flex.subcategory_quick_reply(f["category_slug"])
                                if not f.get("subcategory_slug") else None)
                     messages.append(ask_sub or flex.open_form_message(**f))
+                # คุยค้าง/มีงานค้าง → แนบปุ่มยกเลิกรายการเดิมให้กดได้
+                if pending:
+                    flex.with_quick_reply(messages, flex.restart_quick_reply(True))
                 await line_api.reply(reply_token, messages)
                 return
 
@@ -97,10 +119,12 @@ async def handle_event(event: dict) -> None:
             sub = classify_sub(text, result.slug)
             # หมวดงานด่วน: ถ้าเดาไม่ออกว่าด่วนเรื่องอะไร ให้ถามก่อน อย่าเพิ่งส่งฟอร์ม
             ask_sub = flex.subcategory_quick_reply(result.slug) if not sub else None
-            await line_api.reply(reply_token, [
-                ask_sub or flex.open_form_message(result.slug, subcategory_slug=sub)])
+            messages = [ask_sub or flex.open_form_message(result.slug, subcategory_slug=sub)]
         else:
-            await line_api.reply(reply_token, [flex.category_quick_reply()])
+            messages = [flex.category_quick_reply()]
+        if pending:
+            flex.with_quick_reply(messages, flex.restart_quick_reply(True))
+        await line_api.reply(reply_token, messages)
 
 
 async def handle_group_command(reply_token: str, group_id: str | None, text: str) -> None:
@@ -209,8 +233,27 @@ async def handle_transaction_postback(reply_token: str, line_user_id: str | None
             await line_api.reply(reply_token, [{"type": "text",
                 "text": "ขอบคุณครับพี่ 🙏 ยืนยันงานเรียบร้อย ระบบกำลังโอนเงินให้ช่าง\n"
                         "ฝากรีวิวช่างในแอปเพื่อช่วยช่างดีๆ ในชุมชนของเราด้วยนะครับ ⭐"}])
+
+        elif action == "cancel":                  # กดปุ่มยกเลิกรายการเดิม
+            await handle_cancel(reply_token, line_user_id)
     except HTTPException as e:
         await line_api.reply(reply_token, [{"type": "text", "text": f"ทำรายการไม่สำเร็จ: {e.detail}"}])
+
+
+async def handle_cancel(reply_token: str, line_user_id: str | None) -> None:
+    """ยกเลิกงานที่ค้าง (ก่อนจ่ายเงิน) + ล้างบทสนทนาเดิม แล้วให้เริ่มใหม่"""
+    if not line_user_id:
+        return
+    pool = db.get_pool()
+    me = await pool.fetchrow("SELECT id FROM users WHERE line_user_id = $1", line_user_id)
+    cancelled = await do_cancel_pending(pool, me["id"]) if me else None
+    await ai_chat.clear_history(line_user_id)
+    if cancelled:
+        text = (f"ยกเลิกรายการเดิม \"{cancelled}\" ให้แล้วครับ ✅\n"
+                "เริ่มใหม่ได้เลย พี่อยากให้ช่วยเรื่องอะไรครับ?")
+    else:
+        text = "เริ่มบทสนทนาใหม่ให้แล้วครับ 😊 พี่อยากให้ช่วยเรื่องอะไรครับ?"
+    await line_api.reply(reply_token, [{**flex.category_quick_reply(), "text": text}])
 
 
 async def upsert_user(line_user_id: str | None) -> None:

@@ -195,6 +195,15 @@ async def ensure_table() -> None:
     )
 
 
+async def clear_history(line_user_id: str) -> None:
+    """ล้างบทสนทนาเดิม — คุยครั้งต่อไปจะเริ่มใหม่ ไม่ต่อของเก่า"""
+    try:
+        await db.get_pool().execute(
+            "DELETE FROM chat_history WHERE line_user_id = $1", line_user_id)
+    except Exception:
+        log.exception("ล้างประวัติแชทไม่สำเร็จ: %s", line_user_id)
+
+
 async def chat(line_user_id: str, user_text: str) -> dict | None:
     """คุยกับ Gemini หนึ่ง turn → {"text": str, "category_slug": str | None}
     คืน None เมื่อล้มเหลว (ให้ webhook ถอยไปใช้ keyword matching)"""

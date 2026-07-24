@@ -19,6 +19,26 @@ def public_url(path: str) -> str | None:
     return f"{base}{path}" if base else None
 
 
+def restart_quick_reply(has_pending: bool = False) -> dict:
+    """ปุ่มเล็กใต้ข้อความ — ยกเลิกรายการเดิม/เริ่มบทสนทนาใหม่"""
+    label = "❌ ยกเลิกรายการเดิม" if has_pending else "🆕 เริ่มใหม่"
+    return {"items": [{"type": "action", "action": {
+        "type": "postback", "label": label[:20], "data": "a=cancel",
+        "displayText": "ยกเลิกรายการเดิม เริ่มใหม่"}}]}
+
+
+def with_quick_reply(messages: list[dict], quick_reply: dict) -> list[dict]:
+    """เพิ่มปุ่ม quick reply เข้าข้อความสุดท้าย โดยไม่ทับปุ่มเดิม (เช่นปุ่มเลือกหมวด)
+    LINE จำกัด 13 ปุ่มต่อข้อความ"""
+    if not messages:
+        return messages
+    last = dict(messages[-1])
+    items = list(last.get("quickReply", {}).get("items", [])) + quick_reply["items"]
+    last["quickReply"] = {"items": items[:13]}
+    messages[-1] = last
+    return messages
+
+
 def bid_card(bid: dict, provider: dict, job_title: str) -> dict:
     """การ์ดข้อเสนอช่างที่ push เข้าแชทลูกค้า — กดเลือกช่างได้เลยในแชท"""
     stars = "★" * int(round(provider.get("rating_avg") or 0))
