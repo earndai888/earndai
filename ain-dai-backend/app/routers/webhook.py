@@ -6,7 +6,7 @@ from fastapi import APIRouter, Header, HTTPException, Request
 
 from .. import ai_chat, db, flex, line_api, promptpay
 from ..config import settings
-from ..intent import classify, classify_sub
+from ..intent import classify, classify_sub, subcategories_of
 from .jobs import (do_approve_job, do_cancel_pending, do_confirm_payment,
                    do_select_bid, pending_order)
 
@@ -57,6 +57,8 @@ async def handle_event(event: dict) -> None:
             sub = data.get("sub")
             # เลือกหมวดที่มีงานย่อยแต่ยังไม่ได้บอกว่าเรื่องอะไร → ถามต่ออีกชั้น
             ask_sub = flex.subcategory_quick_reply(slug) if not sub else None
+            if not ask_sub and src.get("userId"):   # เปิดฟอร์มแล้ว = จบเรื่องที่คุยค้าง
+                await ai_chat.clear_pending_intent(src["userId"])
             await line_api.reply(reply_token, [
                 ask_sub or flex.open_form_message(slug, subcategory_slug=sub)])
         elif data.get("a"):
@@ -90,7 +92,7 @@ async def handle_event(event: dict) -> None:
 
         pool = db.get_pool()
         me = await pool.fetchrow("SELECT id FROM users WHERE line_user_id = $1", user_id) if user_id else None
-        pending = await pending_order(pool, me["id"]) if me else None
+        pending_job = await pending_order(pool, me["id"]) if me else None
 
         # AI ชั้นที่ 2: คุยโต้ตอบก่อน ค่อยส่งลิงก์เมื่อคุยรู้เรื่องแล้ว
         if ai_chat.enabled() and user_id:
@@ -108,21 +110,35 @@ async def handle_event(event: dict) -> None:
                                if not f.get("subcategory_slug") else None)
                     messages.append(ask_sub or flex.open_form_message(**f))
                 # คุยค้าง/มีงานค้าง → แนบปุ่มยกเลิกรายการเดิมให้กดได้
-                if pending:
+                if pending_job:
                     flex.with_quick_reply(messages, flex.restart_quick_reply(True))
                 await line_api.reply(reply_token, messages)
                 return
 
-        # ชั้นที่ 1 (fallback): keyword matching
+        # ชั้นที่ 1 (fallback, Gemini ปิด): ถามต่อ 1 คำถามก่อนเปิดฟอร์ม
         result = classify(text)
-        if result.confident:
+        prev = await ai_chat.get_pending_intent(user_id) if user_id else None
+        # คำตอบรายละเอียดมักมีคำ keyword ซ้ำ (เช่น "อยู่น้ำอ้อม ยางแตก") — ถ้าเรื่องยัง
+        # เดิม (หรือเดาไม่ออก) ให้ถือเป็นคำตอบ อย่าถามซ้ำ; เปลี่ยนหมวดชัดเจนถึงเริ่มใหม่
+        answering = prev and (not result.confident or result.slug == prev["category_slug"])
+        if answering:
+            await ai_chat.clear_pending_intent(user_id)
+            sub = prev["subcategory_slug"]
+            messages = [flex.open_form_message(
+                prev["category_slug"], subcategory_slug=sub, description=text[:300])]
+        elif result.confident:
             sub = classify_sub(text, result.slug)
-            # หมวดงานด่วน: ถ้าเดาไม่ออกว่าด่วนเรื่องอะไร ให้ถามก่อน อย่าเพิ่งส่งฟอร์ม
-            ask_sub = flex.subcategory_quick_reply(result.slug) if not sub else None
-            messages = [ask_sub or flex.open_form_message(result.slug, subcategory_slug=sub)]
+            if subcategories_of(result.slug) and not sub:
+                # งานด่วนแต่ยังไม่รู้ว่าด่วนเรื่องอะไร → ถามประเภทก่อน
+                messages = [flex.subcategory_quick_reply(result.slug)]
+            else:
+                # รู้หมวดแล้ว → ถามรายละเอียด/ตำบลก่อน ค่อยเปิดฟอร์ม (ไม่ส่งลิงก์ทันที)
+                if user_id:
+                    await ai_chat.set_pending_intent(user_id, result.slug, sub)
+                messages = [flex.ask_details(result.slug, sub)]
         else:
             messages = [flex.category_quick_reply()]
-        if pending:
+        if pending_job:
             flex.with_quick_reply(messages, flex.restart_quick_reply(True))
         await line_api.reply(reply_token, messages)
 

@@ -193,13 +193,49 @@ async def ensure_table() -> None:
     await pool.execute(
         "CREATE INDEX IF NOT EXISTS idx_chat_user ON chat_history (line_user_id, id DESC)"
     )
+    # เรื่องที่ลูกค้าเพิ่งบอก แต่ยังถามรายละเอียดไม่ครบ (ใช้ตอน Gemini ปิด — ถามต่อ 1 คำถาม)
+    await pool.execute(
+        """CREATE TABLE IF NOT EXISTS chat_pending (
+             line_user_id     text PRIMARY KEY,
+             category_slug    text NOT NULL,
+             subcategory_slug text,
+             updated_at       timestamptz NOT NULL DEFAULT now()
+           )"""
+    )
+
+
+PENDING_TTL_MIN = 30   # เรื่องที่คุยค้างเกินนี้ถือว่าเลิกแล้ว ไม่เอามาต่อ
+
+
+async def set_pending_intent(line_user_id: str, category_slug: str,
+                             subcategory_slug: str | None) -> None:
+    await db.get_pool().execute(
+        """INSERT INTO chat_pending (line_user_id, category_slug, subcategory_slug, updated_at)
+           VALUES ($1,$2,$3, now())
+           ON CONFLICT (line_user_id) DO UPDATE
+             SET category_slug=$2, subcategory_slug=$3, updated_at=now()""",
+        line_user_id, category_slug, subcategory_slug)
+
+
+async def get_pending_intent(line_user_id: str) -> dict | None:
+    row = await db.get_pool().fetchrow(
+        """SELECT category_slug, subcategory_slug FROM chat_pending
+            WHERE line_user_id = $1
+              AND updated_at > now() - make_interval(mins => $2)""",
+        line_user_id, PENDING_TTL_MIN)
+    return dict(row) if row else None
+
+
+async def clear_pending_intent(line_user_id: str) -> None:
+    await db.get_pool().execute("DELETE FROM chat_pending WHERE line_user_id = $1", line_user_id)
 
 
 async def clear_history(line_user_id: str) -> None:
     """ล้างบทสนทนาเดิม — คุยครั้งต่อไปจะเริ่มใหม่ ไม่ต่อของเก่า"""
     try:
-        await db.get_pool().execute(
-            "DELETE FROM chat_history WHERE line_user_id = $1", line_user_id)
+        pool = db.get_pool()
+        await pool.execute("DELETE FROM chat_history WHERE line_user_id = $1", line_user_id)
+        await pool.execute("DELETE FROM chat_pending WHERE line_user_id = $1", line_user_id)
     except Exception:
         log.exception("ล้างประวัติแชทไม่สำเร็จ: %s", line_user_id)
 

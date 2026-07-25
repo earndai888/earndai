@@ -19,6 +19,25 @@ def public_url(path: str) -> str | None:
     return f"{base}{path}" if base else None
 
 
+def ask_details(category_slug: str, subcategory_slug: str | None = None) -> dict:
+    """ถามรายละเอียดต่อ 1 คำถามก่อนเปิดฟอร์ม (ชั้น keyword ตอน Gemini ปิด)
+    มีปุ่ม 'ข้ามไปกรอกฟอร์มเลย' เผื่อคนรีบ"""
+    subcat = SUBCATEGORIES.get(subcategory_slug or "")
+    name = subcat["name"] if subcat else CATEGORY_NAMES.get(category_slug, "งานนี้")
+    data = f"category={category_slug}" + (f"&sub={subcategory_slug}" if subcategory_slug else "")
+    return {
+        "type": "text",
+        "text": f"รับเรื่อง{name}แล้วครับ 😊\n"
+                "เล่าให้ผมฟังอีกนิดได้ไหมครับ — พี่อยู่ตำบลไหนในอำเภอกันทรลักษ์ "
+                "แล้วอาการเป็นยังไง/อยากได้ช่วงเวลาไหน\nเดี๋ยวผมเปิดฟอร์มกรอกให้เลยครับ",
+        "quickReply": {"items": [
+            {"type": "action", "action": {
+                "type": "postback", "label": "📝 ข้ามไปกรอกฟอร์มเลย",
+                "data": data, "displayText": "ขอกรอกฟอร์มเลย"}},
+        ]},
+    }
+
+
 def restart_quick_reply(has_pending: bool = False) -> dict:
     """ปุ่มเล็กใต้ข้อความ — ยกเลิกรายการเดิม/เริ่มบทสนทนาใหม่"""
     label = "❌ ยกเลิกรายการเดิม" if has_pending else "🆕 เริ่มใหม่"
