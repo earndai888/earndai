@@ -87,6 +87,10 @@
     <select class="inp" id="daysel"><option>วันนี้</option><option>พรุ่งนี้</option><option selected>เสาร์นี้</option></select>
     <select class="inp" id="timesel"><option>ช่วงเช้า</option><option>ช่วงบ่าย</option></select>
   </div>
+  <label class="chk" id="pdpabox" style="display:none;margin:12px 18px;gap:10px;align-items:flex-start">
+    <input type="checkbox" id="pdpaok" style="width:20px;height:20px;flex:none;margin-top:1px">
+    <span style="font-size:13px">ยอมรับ <a href="#" onclick="viewPdpa();return false" style="color:var(--green-dark)">นโยบายความเป็นส่วนตัว (PDPA)</a> — เอิ้นได้เก็บข้อมูลเพื่อจับคู่งานและดูแลบริการ ไม่เปิดเผยเบอร์/ที่อยู่ให้ช่างจนกว่าจะเลือกจ้าง</span>
+  </label>
   <button class="btn" id="postbtn" onclick="submitJob()">ส่งประกาศหาช่าง</button>
   <div class="note">ประกาศจะส่งถึงช่างในตำบลของคุณ โดยไม่เปิดเผยชื่อและเบอร์โทร</div>
 </section>
@@ -220,9 +224,16 @@ function clearActive(){ localStorage.removeItem('aindai_job'); go('home'); }
   document.getElementById('amphoesel').innerHTML = amphoes.map(a=>
     `<option>อ.${esc(a)}</option>`).join('');
   loadTopProviders();
+  // ยังไม่ยอมรับ PDPA → โชว์ช่องยินยอมในหน้าแจ้งงาน
+  try{ state.me = await api('/me'); if(!state.me.pdpa_consented) document.getElementById('pdpabox').style.display='flex'; }catch(e){}
   go('home');
   prefillFromChat();   // เปิดจากการ์ดที่คุยกับน้องเอิ้นได้ → กรอกฟอร์มให้เลย
 })();
+
+async function viewPdpa(){
+  try{ const p = await api('/pdpa'); alert(p.title + '\n\n' + p.text); }
+  catch(e){ alert('โหลดนโยบายไม่สำเร็จ'); }
+}
 
 /* เติมฟอร์มจากข้อมูลที่คุยกับ AI ใน LINE (ส่งมาทาง query string) */
 function prefillFromChat(){
@@ -382,6 +393,9 @@ async function submitJob(){
   const email = document.getElementById('jobemail').value.trim();
   if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email))
     return alert('อีเมลไม่ถูกต้องครับ (เว้นว่างได้ถ้าไม่ต้องการใบเสร็จทางอีเมล)');
+  const pdpaShown = document.getElementById('pdpabox').style.display !== 'none';
+  if(pdpaShown && !document.getElementById('pdpaok').checked)
+    return alert('กรุณายอมรับนโยบายความเป็นส่วนตัว (PDPA) ก่อนแจ้งงานครับ');
   btn.disabled = true; btn.textContent = 'กำลังส่งประกาศ…';
   try{
     const r = await api('/jobs', {method:'POST', body:{
@@ -394,7 +408,9 @@ async function submitJob(){
       preferred_time: document.getElementById('daysel').value + ' ' + document.getElementById('timesel').value,
       contact_phone: phone, landmark: document.getElementById('landmark').value.trim() || null,
       lat: state.lat, lng: state.lng, email: email || null,
+      pdpa_consent: document.getElementById('pdpaok').checked,
     }});
+    document.getElementById('pdpabox').style.display='none';
     localStorage.setItem('aindai_job', r.job_id);
     state.photos = []; state.voiceUrl = null; state.lat = null; state.lng = null;
     document.getElementById('photothumbs').innerHTML = '';
@@ -528,7 +544,21 @@ function showTrack(j){
     act.innerHTML = `<div class="note">ช่างกำลังทำงานอยู่ — กด ⟳ มุมขวาบนเพื่ออัปเดต</div>`;
   }else if(j.status==='assigned'){
     act.innerHTML = `<div class="note">รอช่างมาถึงและกรอกรหัสเริ่มงาน</div>`;
+  }else if(j.status==='disputed'){
+    act.innerHTML = `<div class="notice warn">🛡️ <span>แจ้งปัญหาแล้ว — ทีมงานกำลังตรวจสอบ เงินถูกพักไว้ให้จนกว่าจะได้ข้อยุติครับ</span></div>`;
   }else{ act.innerHTML = ''; }
+  // แจ้งปัญหา/ร้องเรียน — เมื่อมีช่างรับงานแล้วและยังไม่จบ/ยังไม่ได้แจ้ง
+  if(['assigned','in_progress','done'].includes(j.status))
+    act.innerHTML += `<button class="btn ghost" style="margin-top:10px" onclick="reportJob()">⚠️ แจ้งปัญหางานนี้</button>`;
+}
+async function reportJob(){
+  const reason = prompt('เล่าปัญหาที่เจอให้ทีมงานตรวจสอบครับ (เช่น ช่างไม่มาตามนัด / งานไม่เรียบร้อย)');
+  if(!reason || reason.trim().length < 5) return;
+  try{
+    await api(`/jobs/${activeJobId()}/report`, {method:'POST', body:{reason: reason.trim()}});
+    alert('รับเรื่องแล้วครับ 🙏 ทีมงานจะตรวจสอบและติดต่อกลับ เงินถูกพักไว้ให้ระหว่างตรวจสอบ');
+    await openActiveJob();
+  }catch(e){ alert('แจ้งปัญหาไม่สำเร็จ: '+e.message); }
 }
 async function approveJob(btn){
   btn.disabled = true; btn.textContent = 'กำลังปล่อยเงิน…';

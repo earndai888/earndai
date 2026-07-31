@@ -108,7 +108,7 @@ async def list_providers(
         SELECT p.id, p.approval_status, p.tier, p.skill_tags, p.active, p.verified,
                p.bio, p.promptpay_id, p.rating_avg, p.rating_count, p.jobs_done,
                p.id_card_url, p.selfie_url, p.license_url, p.admin_note,
-               p.national_id, p.address, p.full_name, p.face_scan_urls,
+               p.national_id, p.address, p.full_name, p.face_scan_urls, p.id_card_expiry,
                p.contract_signature_url, p.contract_version, p.contract_signed_at,
                p.created_at, p.reviewed_at, p.categories, p.tambon_coverage,
                u.line_user_id, u.display_name, u.phone,
@@ -141,6 +141,36 @@ async def list_providers(
     rows = await db.get_pool().fetch(sql, *args)
     return [dict(r) | {"id": str(r["id"]), "created_at": r["created_at"].isoformat()}
             for r in rows]
+
+
+@router.get("/trust-flags")
+async def trust_flags(_: bool = Admin):
+    """บัญชีน่าสงสัย: เบอร์/เลขบัตร/ชื่อจริงซ้ำ (อาจสวมรอย) + บัตรหมดอายุ"""
+    pool = db.get_pool()
+    dups = await pool.fetch("""
+        WITH prov AS (
+          SELECT p.national_id, p.full_name, u.display_name, u.phone
+            FROM providers p JOIN users u ON u.id = p.user_id
+           WHERE p.approval_status <> 'rejected')
+        SELECT 'เบอร์โทรซ้ำ' AS kind, phone AS value, count(*) AS n,
+               array_agg(display_name) AS accounts
+          FROM prov WHERE phone IS NOT NULL GROUP BY phone HAVING count(*) > 1
+        UNION ALL
+        SELECT 'เลขบัตรซ้ำ', national_id, count(*), array_agg(display_name)
+          FROM prov WHERE national_id IS NOT NULL GROUP BY national_id HAVING count(*) > 1
+        UNION ALL
+        SELECT 'ชื่อจริงซ้ำ', full_name, count(*), array_agg(display_name)
+          FROM prov WHERE full_name IS NOT NULL GROUP BY full_name HAVING count(*) > 1
+    """)
+    expired = await pool.fetch("""
+        SELECT p.id, u.display_name, p.full_name, p.id_card_expiry
+          FROM providers p JOIN users u ON u.id = p.user_id
+         WHERE p.id_card_expiry IS NOT NULL AND p.id_card_expiry < CURRENT_DATE
+               AND p.approval_status <> 'rejected'
+         ORDER BY p.id_card_expiry""")
+    return {"duplicates": [dict(r) for r in dups],
+            "expired_cards": [dict(r) | {"id": str(r["id"]),
+                              "id_card_expiry": r["id_card_expiry"].isoformat()} for r in expired]}
 
 
 class ApproveIn(BaseModel):

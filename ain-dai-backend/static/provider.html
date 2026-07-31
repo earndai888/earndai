@@ -33,6 +33,9 @@
   <label class="f">อีเมล *</label>
   <input class="inp" id="remail" placeholder="เช่น name@gmail.com" inputmode="email" maxlength="120" autocomplete="email">
   <div class="note" style="margin:-4px 18px 10px">ใช้ส่งใบเสร็จ/ใบหักภาษี และแจ้งเตือนสำคัญ</div>
+  <label class="f">วันหมดอายุบัตรประชาชน</label>
+  <input class="inp" id="rcardexp" type="date">
+  <div class="note" style="margin:-4px 18px 10px">ดูได้ที่หน้าบัตร (เว้นว่างได้ถ้าบัตรตลอดชีพ)</div>
 
   <div class="sect"><h2>2. ชื่อที่ลูกค้าเห็น <span class="eye">👁 ลูกค้าเห็น</span></h2></div>
   <label class="f">ชื่อที่แสดงให้ลูกค้าเห็น *</label>
@@ -430,6 +433,7 @@ function prefillRegister(){
   document.getElementById('rname').value = me.display_name === 'ผู้ใช้ใหม่' ? '' : me.display_name;
   document.getElementById('rphone').value = me.phone || '';
   document.getElementById('remail').value = me.email || '';
+  document.getElementById('rcardexp').value = (p && p.id_card_expiry) || '';
   document.getElementById('rbio').value = p ? (p.bio || '') : '';
   document.getElementById('rpromptpay').value = p ? (p.promptpay_id || '') : '';
   const cats = p ? p.category_slugs : [];
@@ -504,6 +508,7 @@ async function register(){
     const signatureUrl = signed ? await uploadSignature() : null;
     await api('/provider/register', {method:'POST', body:{
       display_name: name, full_name: fullName, national_id: nid, phone, email,
+      id_card_expiry: document.getElementById('rcardexp').value || null,
       bio: bio || null,
       promptpay_id: document.getElementById('rpromptpay').value.trim() || null,
       category_slugs: cats, subcategory_slugs: subs, tambon_ids: tams,

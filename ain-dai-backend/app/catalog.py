@@ -88,3 +88,14 @@ async def ensure_job_fields() -> None:
     await pool.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS receipt_token text")
     await pool.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS receipt_no int")
     await pool.execute("CREATE SEQUENCE IF NOT EXISTS receipt_no_seq START 1")
+
+
+async def ensure_trust_fields() -> None:
+    """ชุด 4 ความน่าเชื่อถือ: วันหมดอายุบัตร + ความยินยอม PDPA"""
+    pool = db.get_pool()
+    await pool.execute(
+        "ALTER TABLE providers ADD COLUMN IF NOT EXISTS id_card_expiry date")
+    await pool.execute(
+        """ALTER TABLE users
+             ADD COLUMN IF NOT EXISTS pdpa_consent_at timestamptz,
+             ADD COLUMN IF NOT EXISTS pdpa_version    text""")

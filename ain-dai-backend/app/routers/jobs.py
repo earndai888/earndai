@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
-from .. import (contact_guard, contract, db, flex, line_api, mailer, promptpay,
+from .. import (contact_guard, contract, db, flex, line_api, mailer, pdpa, promptpay,
                 receipt, thai_id, vault)
 from ..config import settings
 from ..intent import CATEGORY_NAMES, subcategories_of
@@ -101,6 +101,7 @@ async def me(user: dict = Depends(current_user)):
         "display_name": user["display_name"],
         "phone": user["phone"],
         "email": user.get("email"),
+        "pdpa_consented": user.get("pdpa_version") == pdpa.PDPA_VERSION,
         # ทำงานได้ต่อเมื่อแอดมินอนุมัติแล้วและไม่ถูกระงับ
         "is_provider": bool(prov and prov["active"] and prov["approval_status"] == "approved"),
         "has_applied": bool(prov),
@@ -111,6 +112,7 @@ async def me(user: dict = Depends(current_user)):
             "category_slugs": prov["category_slugs"] or [],
             "subcategory_slugs": prov["subcategory_slugs"] or [],
             "full_name": prov["full_name"],
+            "id_card_expiry": prov["id_card_expiry"].isoformat() if prov["id_card_expiry"] else None,
             # ไม่ส่งเลขบัตรเต็มกลับ — โชว์แค่ให้รู้ว่ากรอกไว้แล้ว
             "national_id_masked": thai_id.mask_id(prov["national_id"] or ""),
             "face_scan_count": len(prov["face_scan_urls"] or []),
@@ -137,6 +139,7 @@ class ProviderRegisterIn(BaseModel):
     national_id: str = Field(min_length=13, max_length=20)   # เลขบัตรประชาชน 13 หลัก
     phone: str = Field(min_length=9, max_length=20)
     email: str = Field(min_length=5, max_length=120)         # อีเมล (บังคับ) — ใบเสร็จ/แจ้งเตือน
+    id_card_expiry: date | None = None                       # วันหมดอายุบัตร (เว้นได้ถ้าบัตรตลอดชีพ)
     # สแกนใบหน้า + ลายเซ็นสัญญา — เว้นว่างได้เฉพาะตอนแก้โปรไฟล์ (ใช้ของเดิมที่เก็บไว้)
     face_scan_urls: list[str] = []
     contract_signature_url: str | None = None
@@ -176,6 +179,9 @@ def _check_identity(body: ProviderRegisterIn, existing: dict | None) -> dict:
     email = thai_id.normalize_email(body.email)
     if not email:
         raise HTTPException(400, "อีเมลไม่ถูกต้องครับ (เช่น name@gmail.com)")
+    # วันหมดอายุบัตร — เว้นได้ (บัตรตลอดชีพ) แต่ถ้าใส่ต้องยังไม่หมดอายุ
+    if body.id_card_expiry and body.id_card_expiry < date.today():
+        raise HTTPException(400, "บัตรประชาชนหมดอายุแล้ว กรุณาต่ออายุบัตรก่อนสมัครครับ")
 
     # เอกสารยืนยันตัวตนต้องอยู่ในห้องนิรภัยเท่านั้น (กันยิง url ภายนอก และกันเก็บผิดที่)
     urls = [*body.face_scan_urls,
@@ -219,6 +225,12 @@ async def provider_register(body: ProviderRegisterIn, user: dict = Depends(curre
         national_id, user["id"])
     if dup:
         raise HTTPException(400, "เลขบัตรนี้มีผู้สมัครไว้แล้ว หากเป็นของพี่จริงกรุณาติดต่อแอดมินครับ")
+    # เบอร์เดียวสมัครได้บัญชีเดียว — กันสร้างหลายบัญชีด้วยเบอร์เดิม
+    dup_phone = await pool.fetchval(
+        """SELECT count(*) FROM providers p JOIN users u ON u.id = p.user_id
+            WHERE u.phone = $1 AND p.user_id <> $2""", ident["phone"], user["id"])
+    if dup_phone:
+        raise HTTPException(400, "เบอร์นี้มีช่างสมัครไว้แล้ว ใช้เบอร์อื่นหรือติดต่อแอดมินครับ")
     cat_rows = await pool.fetch(
         "SELECT id FROM service_categories WHERE slug = ANY($1::text[]) AND active",
         list(set(body.category_slugs)))
@@ -242,8 +254,8 @@ async def provider_register(body: ProviderRegisterIn, user: dict = Depends(curre
                                   id_card_url, selfie_url, license_url, subcategories,
                                   full_name, national_id, face_scan_urls,
                                   contract_signature_url, contract_version, contract_signed_at,
-                                  approval_status, active)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,now(),'pending',false)
+                                  id_card_expiry, approval_status, active)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,now(),$15,'pending',false)
            ON CONFLICT (user_id) DO UPDATE
              SET categories = $2, tambon_coverage = $3, bio = $4, promptpay_id = $5,
                  id_card_url = COALESCE($6, providers.id_card_url),
@@ -252,6 +264,7 @@ async def provider_register(body: ProviderRegisterIn, user: dict = Depends(curre
                  subcategories = $9,
                  full_name = $10, national_id = $11, face_scan_urls = $12,
                  contract_signature_url = $13, contract_version = $14, contract_signed_at = now(),
+                 id_card_expiry = COALESCE($15, providers.id_card_expiry),
                  approval_status = CASE WHEN providers.approval_status = 'approved'
                                         THEN 'approved' ELSE 'pending' END
            RETURNING approval_status""",
@@ -259,7 +272,7 @@ async def provider_register(body: ProviderRegisterIn, user: dict = Depends(curre
         body.bio, body.promptpay_id, body.id_card_url, body.selfie_url, body.license_url,
         [r["id"] for r in sub_rows],
         body.full_name.strip(), national_id, ident["faces"],
-        ident["signature"], ident["version"])
+        ident["signature"], ident["version"], body.id_card_expiry)
     await pool.execute(
         "UPDATE users SET display_name = $2, phone = $3, email = $4, role = 'provider' WHERE id = $1",
         user["id"], body.display_name, ident["phone"], ident["email"])
@@ -347,11 +360,27 @@ class JobIn(BaseModel):
     lat: float | None = Field(default=None, ge=-90, le=90)
     lng: float | None = Field(default=None, ge=-180, le=180)
     email: str | None = Field(default=None, max_length=120)      # อีเมล (ไม่บังคับ) — ส่งใบเสร็จ
+    pdpa_consent: bool = False                                   # ยอมรับ PDPA (บังคับครั้งแรก)
+
+
+@router.get("/pdpa")
+async def pdpa_policy():
+    """นโยบายความเป็นส่วนตัว (PDPA)"""
+    return pdpa.payload()
 
 
 @router.post("/jobs", status_code=201)
 async def create_job(body: JobIn, user: dict = Depends(current_user)):
     pool = db.get_pool()
+    # ความยินยอม PDPA — บังคับครั้งแรก (เวอร์ชันใหม่ต้องยอมรับใหม่)
+    consented = await pool.fetchval(
+        "SELECT pdpa_version = $2 FROM users WHERE id = $1", user["id"], pdpa.PDPA_VERSION)
+    if not consented:
+        if not body.pdpa_consent:
+            raise HTTPException(400, "กรุณายอมรับนโยบายความเป็นส่วนตัว (PDPA) ก่อนแจ้งงานครับ")
+        await pool.execute(
+            "UPDATE users SET pdpa_consent_at = now(), pdpa_version = $2 WHERE id = $1",
+            user["id"], pdpa.PDPA_VERSION)
     cat = await pool.fetchrow("SELECT * FROM service_categories WHERE slug = $1", body.category_slug)
     if not cat:
         raise HTTPException(400, "ไม่รู้จักหมวดงานนี้")
@@ -812,6 +841,36 @@ async def confirm_payment(payment_id: str, user: dict = Depends(current_user)):
     if not r:
         raise HTTPException(400, "ไม่พบรายการหรือจ่ายไปแล้ว")
     return {"job_id": str(r["job"]["id"]), "status": "assigned", "customer_otp": r["otp"]}
+
+
+# ── ลูกค้าแจ้งปัญหา/ร้องเรียน ───────────────────────────
+
+class ReportIn(BaseModel):
+    reason: str = Field(min_length=5, max_length=500)
+
+
+@router.post("/jobs/{job_id}/report", status_code=201)
+async def report_job(job_id: str, body: ReportIn, user: dict = Depends(current_user)):
+    """ลูกค้าแจ้งปัญหา → เปิดเรื่องให้แอดมินตรวจสอบ (พักการจ่ายเงินไว้ก่อน)"""
+    pool = db.get_pool()
+    job = await pool.fetchrow(
+        "SELECT * FROM jobs WHERE id = $1::uuid AND customer_id = $2", job_id, user["id"])
+    if not job:
+        raise HTTPException(404, "ไม่พบงานนี้")
+    if job["status"] not in ("assigned", "in_progress", "done", "confirmed", "settled", "disputed"):
+        raise HTTPException(400, "งานนี้ยังไม่มีช่างรับงาน จึงยังไม่มีเรื่องให้ร้องเรียนครับ")
+    existing = await pool.fetchval(
+        "SELECT id FROM disputes WHERE job_id = $1 AND status = 'open'", job["id"])
+    if existing:
+        raise HTTPException(400, "เรื่องนี้อยู่ระหว่างการตรวจสอบของแอดมินแล้วครับ")
+    dispute = await pool.fetchrow(
+        """INSERT INTO disputes (job_id, opened_by, reason) VALUES ($1, $2, $3) RETURNING id""",
+        job["id"], user["id"], body.reason)
+    # งานที่ยังไม่จบ → พักไว้เป็น disputed กันปล่อยเงินอัตโนมัติระหว่างตรวจสอบ
+    if job["status"] in ("assigned", "in_progress", "done"):
+        await pool.execute("UPDATE jobs SET status = 'disputed' WHERE id = $1", job["id"])
+    log.warning("ลูกค้าแจ้งปัญหา งาน %s: %s", job["id"], body.reason[:80])
+    return {"ok": True, "dispute_id": str(dispute["id"])}
 
 
 # ── OTP เริ่มงาน / เสร็จงาน / ยืนยัน ────────────────────

@@ -163,6 +163,7 @@ label.f{display:block;font-family:'Mitr';font-size:13.5px;margin:14px 0 6px}
     <div class="grp">ตั้งค่า</div>
     <button class="navitem" data-p="set-groups"><span class="ic">💬</span>กลุ่มไลน์ช่าง</button>
     <button class="navitem" data-p="set-system"><span class="ic">⚙️</span>ตั้งค่าระบบ</button>
+    <button class="navitem" data-p="trust"><span class="ic">🕵️</span>บัญชีน่าสงสัย</button>
     <button class="navitem" data-p="audit"><span class="ic">📜</span>ประวัติการแก้ไข</button>
 
     <div class="foot"><button onclick="logout()">ออกจากระบบ</button></div>
@@ -250,6 +251,13 @@ label.f{display:block;font-family:'Mitr';font-size:13.5px;margin:14px 0 6px}
         <h2>ลิงก์เข้ากลุ่มแต่ละหมวด</h2>
         <div id="groupLinks"></div>
       </div>
+    </section>
+
+    <section class="page" id="p-trust">
+      <div class="phead"><h1>🕵️ บัญชีน่าสงสัย</h1>
+        <p>เบอร์/เลขบัตร/ชื่อจริงซ้ำหลายบัญชี (อาจสวมรอย) และช่างที่บัตรหมดอายุ</p></div>
+      <div class="card"><h2>ข้อมูลซ้ำกันหลายบัญชี</h2><div id="dupList"></div></div>
+      <div class="card"><h2>บัตรประชาชนหมดอายุ</h2><div id="expList"></div></div>
     </section>
 
     <section class="page" id="p-audit">
@@ -355,7 +363,7 @@ function nav(p){
   }else{
     ({overview:loadOverview,approve:loadApprove,directory:loadDirectory,finance:loadFinance,
       disputes:loadDisputes,reports:()=>{}, 'set-groups':loadGroupLinks,
-      'set-system':loadSystem, audit:loadAudit})[p]();
+      'set-system':loadSystem, audit:loadAudit, trust:loadTrust})[p]();
   }
 }
 
@@ -456,7 +464,8 @@ function openDrawer(id){
     </div>
     <label class="f">ชื่อจริงตามบัตร</label>
     <div>${p.full_name ? '<b>'+esc(p.full_name)+'</b>' :
-      '<span class="chip danger">ช่างยังไม่ได้กรอกชื่อจริง (สมัครก่อนระบบยืนยันตัวตน)</span>'}</div>
+      '<span class="chip danger">ช่างยังไม่ได้กรอกชื่อจริง (สมัครก่อนระบบยืนยันตัวตน)</span>'}
+      ${cardExpiryChip(p.id_card_expiry)}</div>
     <label class="f">เอกสารยืนยันตัวตน (คลิกรูปเพื่อขยาย)</label>
     <div class="thumbs">${docImgs(p)}</div>
     <label class="f">รูปสแกนใบหน้า <span class="muted">(เทียบกับรูปบัตรว่าคนเดียวกันไหม)</span></label>
@@ -525,6 +534,13 @@ function faceImgs(p){
          <img data-secure="${esc(u)}" onclick="this.classList.toggle('zoom')" alt="สแกนใบหน้า ${i+1}">
          <div class="muted" style="font-size:12px">ท่าที่ ${i+1}</div></div>`).join('')
     : '<span class="chip danger">ยังไม่มีรูปสแกนใบหน้า</span>';
+}
+function cardExpiryChip(exp){
+  if(!exp) return '<span class="chip gray">บัตรตลอดชีพ/ไม่ระบุวันหมดอายุ</span>';
+  const expired = new Date(exp) < new Date(new Date().toDateString());
+  return expired
+    ? `<span class="chip danger">⛔ บัตรหมดอายุ ${dt(exp)}</span>`
+    : `<span class="chip">บัตรหมดอายุ ${dt(exp)}</span>`;
 }
 function contractBlock(p){
   if(!p.contract_signature_url) return '<span class="chip danger">ยังไม่ได้เซ็นหนังสือสัญญา</span>';
@@ -610,6 +626,19 @@ async function doAction(kind){
 }
 
 /* ── ทะเบียนช่าง ── */
+async function loadTrust(){
+  const t = await api('/trust-flags');
+  document.getElementById('dupList').innerHTML = t.duplicates.length ? table(
+    ['ชนิด','ค่าที่ซ้ำ','จำนวน','บัญชีที่เกี่ยวข้อง'],
+    t.duplicates.map(d=>[`<span class="chip warn">${esc(d.kind)}</span>`, esc(d.value),
+      d.n+' บัญชี', (d.accounts||[]).map(a=>`<span class="chip">${esc(a)}</span>`).join('')]))
+    : '<div class="muted">✅ ไม่พบเบอร์/เลขบัตร/ชื่อจริงซ้ำกัน</div>';
+  document.getElementById('expList').innerHTML = t.expired_cards.length ? table(
+    ['ชื่อที่แสดง','ชื่อจริง','วันหมดอายุ'],
+    t.expired_cards.map(e=>[esc(e.display_name), esc(e.full_name||'-'),
+      `<span class="chip danger">${dt(e.id_card_expiry)}</span>`]))
+    : '<div class="muted">✅ ไม่มีช่างที่บัตรหมดอายุ</div>';
+}
 async function loadAudit(){
   const rows = await api('/audit');
   const พูดไทย = {'แก้ข้อมูลช่าง':'chip','ลบข้อมูลช่าง':'chip danger'};
