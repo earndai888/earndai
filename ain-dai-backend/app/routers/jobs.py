@@ -11,7 +11,8 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 
-from .. import contact_guard, contract, db, flex, line_api, promptpay, thai_id, vault
+from .. import (contact_guard, contract, db, flex, line_api, mailer, promptpay,
+                receipt, thai_id, vault)
 from ..config import settings
 from ..intent import CATEGORY_NAMES, subcategories_of
 from ..settlement import FeeConfig, compute_split
@@ -99,6 +100,7 @@ async def me(user: dict = Depends(current_user)):
         "line_user_id": user["line_user_id"],
         "display_name": user["display_name"],
         "phone": user["phone"],
+        "email": user.get("email"),
         # ทำงานได้ต่อเมื่อแอดมินอนุมัติแล้วและไม่ถูกระงับ
         "is_provider": bool(prov and prov["active"] and prov["approval_status"] == "approved"),
         "has_applied": bool(prov),
@@ -134,6 +136,7 @@ class ProviderRegisterIn(BaseModel):
     full_name: str = Field(min_length=4, max_length=120)     # ชื่อ-นามสกุลจริงตามบัตร
     national_id: str = Field(min_length=13, max_length=20)   # เลขบัตรประชาชน 13 หลัก
     phone: str = Field(min_length=9, max_length=20)
+    email: str = Field(min_length=5, max_length=120)         # อีเมล (บังคับ) — ใบเสร็จ/แจ้งเตือน
     # สแกนใบหน้า + ลายเซ็นสัญญา — เว้นว่างได้เฉพาะตอนแก้โปรไฟล์ (ใช้ของเดิมที่เก็บไว้)
     face_scan_urls: list[str] = []
     contract_signature_url: str | None = None
@@ -170,6 +173,9 @@ def _check_identity(body: ProviderRegisterIn, existing: dict | None) -> dict:
     phone = thai_id.normalize_phone(body.phone)
     if not phone:
         raise HTTPException(400, "เบอร์โทรศัพท์ไม่ถูกต้องครับ")
+    email = thai_id.normalize_email(body.email)
+    if not email:
+        raise HTTPException(400, "อีเมลไม่ถูกต้องครับ (เช่น name@gmail.com)")
 
     # เอกสารยืนยันตัวตนต้องอยู่ในห้องนิรภัยเท่านั้น (กันยิง url ภายนอก และกันเก็บผิดที่)
     urls = [*body.face_scan_urls,
@@ -196,7 +202,7 @@ def _check_identity(body: ProviderRegisterIn, existing: dict | None) -> dict:
             raise HTTPException(400, "หนังสือสัญญามีการปรับปรุง กรุณาอ่านและเซ็นใหม่ครับ")
 
     return {"national_id": thai_id.normalize_id(body.national_id), "phone": phone,
-            "faces": faces, "signature": signature, "version": version}
+            "email": email, "faces": faces, "signature": signature, "version": version}
 
 
 @router.post("/provider/register", status_code=201)
@@ -255,8 +261,8 @@ async def provider_register(body: ProviderRegisterIn, user: dict = Depends(curre
         body.full_name.strip(), national_id, ident["faces"],
         ident["signature"], ident["version"])
     await pool.execute(
-        "UPDATE users SET display_name = $2, phone = $3, role = 'provider' WHERE id = $1",
-        user["id"], body.display_name, ident["phone"])
+        "UPDATE users SET display_name = $2, phone = $3, email = $4, role = 'provider' WHERE id = $1",
+        user["id"], body.display_name, ident["phone"], ident["email"])
     return {"ok": True, "approval_status": row["approval_status"]}
 
 
@@ -340,6 +346,7 @@ class JobIn(BaseModel):
     landmark: str | None = Field(default=None, max_length=200)   # จุดสังเกตบ้าน
     lat: float | None = Field(default=None, ge=-90, le=90)
     lng: float | None = Field(default=None, ge=-180, le=180)
+    email: str | None = Field(default=None, max_length=120)      # อีเมล (ไม่บังคับ) — ส่งใบเสร็จ
 
 
 @router.post("/jobs", status_code=201)
@@ -366,6 +373,12 @@ async def create_job(body: JobIn, user: dict = Depends(current_user)):
     if len(photos) < MIN_JOB_PHOTOS:
         raise HTTPException(400, f"แนบรูปหน้างานอย่างน้อย {MIN_JOB_PHOTOS} รูปครับ "
                                  "ช่างจะได้ประเมินงานและเตรียมของถูก")
+    # อีเมล (ไม่บังคับ) — เก็บไว้ที่ผู้ใช้ ใช้ส่งใบเสร็จทางอีเมล
+    if body.email:
+        if em := thai_id.normalize_email(body.email):
+            await pool.execute("UPDATE users SET email = $2 WHERE id = $1", user["id"], em)
+        else:
+            raise HTTPException(400, "อีเมลไม่ถูกต้องครับ")
     job = await pool.fetchrow(
         """INSERT INTO jobs (customer_id, category_id, subcategory_id, tambon_id, title, description,
              photos, voice_note_url, budget_min, budget_max, preferred_date,
@@ -701,6 +714,38 @@ async def select_bid(job_id: str, bid_id: str, user: dict = Depends(current_user
             "message": "สแกนจ่าย PromptPay แล้วยืนยันการโอน"}
 
 
+async def _send_receipt(pool, payment_row, job) -> None:
+    """ออกเลขใบเสร็จ + ส่งทาง LINE (ปุ่มดาวน์โหลด) และอีเมลถ้ามี — best effort"""
+    try:
+        token = payment_row["receipt_token"] or secrets.token_urlsafe(16)
+        no = payment_row["receipt_no"]
+        if not payment_row["receipt_token"]:
+            no = await pool.fetchval("SELECT nextval('receipt_no_seq')")
+            await pool.execute(
+                "UPDATE payments SET receipt_token=$2, receipt_no=$3 WHERE id=$1",
+                payment_row["id"], token, no)
+        cust = await pool.fetchrow(
+            "SELECT line_user_id, email, display_name FROM users WHERE id = $1", job["customer_id"])
+        prov = await pool.fetchval(
+            """SELECT u.display_name FROM bids b JOIN providers p ON p.id=b.provider_id
+                 JOIN users u ON u.id=p.user_id WHERE b.id=$1""", job["assigned_bid_id"])
+        data = {"receipt_no": no, "pay_date": date.today(),
+                "customer_name": cust["display_name"] if cust else "-",
+                "job_title": job["title"], "provider_name": prov or "-",
+                "amount": payment_row["amount"]}
+        url = flex.public_url(f"/api/receipt/{token}")
+        if cust and cust["line_user_id"]:
+            await line_api.push(cust["line_user_id"],
+                                [flex.receipt_card(no, payment_row["amount"], url)])
+        if cust and cust["email"] and mailer.configured():
+            pdf = receipt.build_pdf(data)
+            await mailer.send(cust["email"], "ใบเสร็จรับเงิน — เอิ้นได้",
+                              f"ขอบคุณที่ใช้บริการเอิ้นได้ครับ แนบใบเสร็จเลขที่ RCP-{no:06d} มาให้ครับ",
+                              (f"receipt-{no}.pdf", pdf, "application/pdf"))
+    except Exception:
+        log.warning("ส่งใบเสร็จไม่สำเร็จ (payment %s)", payment_row["id"])
+
+
 async def do_confirm_payment(pool, payment_id: str, customer_id=None) -> dict | None:
     """ยืนยันการชำระ → escrow, สุ่ม OTP, สถานะ assigned, แจ้งช่าง
     customer_id: ใส่เพื่อกันคนอื่นยืนยันแทน (ฝั่งแชท) — None = ไม่เช็ค (REST เดิม)"""
@@ -712,6 +757,7 @@ async def do_confirm_payment(pool, payment_id: str, customer_id=None) -> dict | 
         owner = await pool.fetchval("SELECT customer_id FROM jobs WHERE id = $1", payment["job_id"])
         if owner != customer_id:
             raise HTTPException(403, "ไม่ใช่งานของคุณ")
+    payment = dict(payment)
     await pool.execute(
         "UPDATE payments SET status='paid', paid_at=now() WHERE id=$1", payment["id"])
     otp = f"{secrets.randbelow(10000):04d}"
@@ -733,7 +779,30 @@ async def do_confirm_payment(pool, payment_id: str, customer_id=None) -> dict | 
                 "text": f"🎉 คุณได้งาน \"{job['title']}\" แล้ว!\nลูกค้าจ่ายเงินเข้าระบบเรียบร้อย เงินพักปลอดภัยใน escrow\n\nเมื่อถึงหน้างาน ขอรหัส 4 หลักจากลูกค้าแล้วกรอกในระบบเพื่อเริ่มงานครับ"}])
         except Exception:
             pass
+    await _send_receipt(pool, payment, job)   # ใบเสร็จเข้า LINE (+ อีเมลถ้ามี)
     return {"job": job, "otp": otp}
+
+
+@router.get("/receipt/{token}")
+async def receipt_pdf(token: str):
+    """เปิด/ดาวน์โหลดใบเสร็จ — ใช้โทเคนลับแทน auth (ลิงก์เดาไม่ได้ เปิดในเบราว์เซอร์/LINE ได้)"""
+    row = await db.get_pool().fetchrow(
+        """SELECT p.receipt_no, p.amount, p.paid_at, j.title AS job_title,
+                  cu.display_name AS customer_name, pu.display_name AS provider_name
+             FROM payments p JOIN jobs j ON j.id = p.job_id
+             JOIN users cu ON cu.id = j.customer_id
+             LEFT JOIN bids b ON b.id = j.assigned_bid_id
+             LEFT JOIN providers pr ON pr.id = b.provider_id
+             LEFT JOIN users pu ON pu.id = pr.user_id
+            WHERE p.receipt_token = $1""", token)
+    if not row or not row["receipt_no"]:
+        raise HTTPException(404, "ไม่พบใบเสร็จ")
+    pdf = receipt.build_pdf({
+        "receipt_no": row["receipt_no"], "pay_date": (row["paid_at"] or date.today()),
+        "customer_name": row["customer_name"], "job_title": row["job_title"],
+        "provider_name": row["provider_name"], "amount": row["amount"]})
+    return Response(pdf, media_type="application/pdf", headers={
+        "Content-Disposition": f'inline; filename="receipt-{row["receipt_no"]:06d}.pdf"'})
 
 
 @router.post("/payments/{payment_id}/confirm")

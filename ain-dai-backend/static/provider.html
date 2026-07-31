@@ -30,6 +30,9 @@
   <div class="note" id="rnidhint" style="margin:-4px 18px 10px">ใช้ยืนยันตัวตนและออกใบหักภาษี 50 ทวิ — ลูกค้าไม่เห็นเลขนี้</div>
   <label class="f">เบอร์โทรศัพท์ *</label>
   <input class="inp" id="rphone" placeholder="08xxxxxxxx" inputmode="tel" maxlength="20" autocomplete="tel">
+  <label class="f">อีเมล *</label>
+  <input class="inp" id="remail" placeholder="เช่น name@gmail.com" inputmode="email" maxlength="120" autocomplete="email">
+  <div class="note" style="margin:-4px 18px 10px">ใช้ส่งใบเสร็จ/ใบหักภาษี และแจ้งเตือนสำคัญ</div>
 
   <div class="sect"><h2>2. ชื่อที่ลูกค้าเห็น <span class="eye">👁 ลูกค้าเห็น</span></h2></div>
   <label class="f">ชื่อที่แสดงให้ลูกค้าเห็น *</label>
@@ -426,6 +429,7 @@ function prefillRegister(){
   }
   document.getElementById('rname').value = me.display_name === 'ผู้ใช้ใหม่' ? '' : me.display_name;
   document.getElementById('rphone').value = me.phone || '';
+  document.getElementById('remail').value = me.email || '';
   document.getElementById('rbio').value = p ? (p.bio || '') : '';
   document.getElementById('rpromptpay').value = p ? (p.promptpay_id || '') : '';
   const cats = p ? p.category_slugs : [];
@@ -466,6 +470,7 @@ async function register(){
   const fullName = document.getElementById('rfullname').value.trim();
   const nid = nidDigits();
   const phone = document.getElementById('rphone').value.trim();
+  const email = document.getElementById('remail').value.trim();
   const cats = [...document.querySelectorAll('#rcats .chip.on')].map(c=>c.dataset.slug);
   const subs = [...document.querySelectorAll('#rsubs .chip.on')].map(c=>c.dataset.slug);
   const tams = [...document.querySelectorAll('#rtambons .chip.on')].map(c=>+c.dataset.id);
@@ -474,6 +479,7 @@ async function register(){
     return alert('กรอกทั้งชื่อและนามสกุลจริงตามบัตรประชาชนครับ');
   if(!validNid(nid)) return alert('เลขบัตรประชาชนไม่ถูกต้อง ลองตรวจดูอีกทีครับ');
   if(phone.replace(/\D/g,'').length < 9) return alert('กรอกเบอร์โทรศัพท์ให้ถูกต้องครับ');
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return alert('กรอกอีเมลให้ถูกต้องครับ เช่น name@gmail.com');
   if(name.length < 2) return alert('ใส่ชื่อที่แสดงให้ลูกค้าเห็นก่อนครับ');
   const bio = document.getElementById('rbio').value.trim();
   const leak = findContactLeak(name) || findContactLeak(bio);
@@ -497,7 +503,7 @@ async function register(){
   try{
     const signatureUrl = signed ? await uploadSignature() : null;
     await api('/provider/register', {method:'POST', body:{
-      display_name: name, full_name: fullName, national_id: nid, phone,
+      display_name: name, full_name: fullName, national_id: nid, phone, email,
       bio: bio || null,
       promptpay_id: document.getElementById('rpromptpay').value.trim() || null,
       category_slugs: cats, subcategory_slugs: subs, tambon_ids: tams,

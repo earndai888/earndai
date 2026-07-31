@@ -12,7 +12,8 @@ GOOD_ID = "1234567890121"
 def _body(**over):
     base = dict(
         display_name="ช่างเอก แอร์เย็นฉ่ำ", full_name="สมชาย ใจดี", national_id=GOOD_ID,
-        phone="0812345678", category_slugs=["ac-cleaning"], tambon_ids=[1],
+        phone="0812345678", email="chang@gmail.com",
+        category_slugs=["ac-cleaning"], tambon_ids=[1],
         face_scan_urls=["/api/secure-file/a.jpg"], contract_signature_url="/api/secure-file/sig.png",
         contract_version=contract.CONTRACT_VERSION,
     )

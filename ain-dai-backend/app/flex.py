@@ -126,6 +126,29 @@ def payment_card(payment_id: str, amount, provider_name: str, qr_path: str) -> d
             "contents": bubble}
 
 
+def receipt_card(receipt_no: int, amount, url: str | None) -> dict:
+    """ใบเสร็จเข้าแชท — ปุ่มดาวน์โหลด PDF (ถ้าตั้งโดเมนแล้ว)"""
+    body = [
+        {"type": "text", "text": "🧾 ใบเสร็จรับเงิน", "size": "sm", "color": GREEN, "weight": "bold"},
+        {"type": "text", "text": f"เลขที่ RCP-{receipt_no:06d}", "size": "md", "weight": "bold",
+         "color": NAVY},
+        {"type": "text", "text": f"{int(amount):,} บาท", "size": "xl", "color": ORANGE,
+         "weight": "bold", "margin": "sm"},
+        {"type": "text", "text": "เงินเข้าบัญชีกลางเอิ้นได้เรียบร้อย เก็บใบเสร็จไว้เป็นหลักฐานได้ครับ",
+         "size": "xs", "color": "#68776C", "wrap": True, "margin": "sm"},
+    ]
+    footer = []
+    if url:
+        footer.append({"type": "button", "style": "primary", "color": GREEN, "height": "sm",
+                       "action": {"type": "uri", "label": "📄 ดาวน์โหลดใบเสร็จ", "uri": url}})
+    bubble = {"type": "bubble",
+              "body": {"type": "box", "layout": "vertical", "spacing": "xs", "contents": body}}
+    if footer:
+        bubble["footer"] = {"type": "box", "layout": "vertical", "contents": footer}
+    return {"type": "flex", "altText": f"ใบเสร็จรับเงิน RCP-{receipt_no:06d} {int(amount):,} บาท",
+            "contents": bubble}
+
+
 def job_done_card(job_id: str, job_title: str) -> dict:
     """ช่างส่งงาน → การ์ดให้ลูกค้ากดยืนยันในแชท"""
     return {

@@ -29,6 +29,12 @@ class Settings(BaseSettings):
     company_name: str = "เอิ้นได้"
     company_tax_id: str = ""
     company_address: str = ""
+    # ส่งอีเมล (ใบเสร็จ) — เว้นว่าง = ไม่ส่งอีเมล ใช้ใบเสร็จทาง LINE อย่างเดียว
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""          # อีเมลผู้ส่ง (เว้นว่าง = ใช้ smtp_user)
     # AI ชั้นที่ 2 — คุยโต้ตอบผ่าน Gemini ก่อนส่งลิงก์ฟอร์ม
     # (เว้นว่าง = ปิด ใช้ keyword matching อย่างเดียว) — คีย์ฟรีจาก aistudio.google.com/apikey
     gemini_api_key: str = ""

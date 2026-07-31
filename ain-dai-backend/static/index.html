@@ -73,6 +73,10 @@
   <input class="inp" id="jobphone" inputmode="tel" maxlength="20" placeholder="08xxxxxxxx">
   <div class="note" style="margin:-2px 18px 8px">🔒 ช่างไม่เห็นเบอร์นี้ — เก็บไว้ให้ทีมงานติดต่อพี่กรณีจำเป็นเท่านั้น</div>
 
+  <label class="f">อีเมล (สำหรับใบเสร็จ)</label>
+  <input class="inp" id="jobemail" inputmode="email" maxlength="120" placeholder="เช่น name@gmail.com">
+  <div class="note" id="emailhint" style="margin:-2px 18px 8px">💡 ใส่อีเมลไว้จะได้รับใบเสร็จทางอีเมลด้วย (ไม่ใส่ก็ได้ใบเสร็จทาง LINE อยู่แล้ว)</div>
+
   <label class="f">งบประมาณ (บาท)</label>
   <div class="row2">
     <input class="inp" id="bmin" placeholder="ต่ำสุด เช่น 300" inputmode="numeric">
@@ -375,6 +379,9 @@ async function submitJob(){
   if(phone.replace(/\D/g,'').length < 9) return alert('กรอกเบอร์ติดต่อหน้างานให้ถูกต้องครับ');
   if(!state.lat && !document.getElementById('landmark').value.trim())
     return alert('ปักหมุดตำแหน่งบ้าน หรือกรอกจุดสังเกตบ้าน อย่างใดอย่างหนึ่งครับ ช่างจะได้ไปถูกที่');
+  const email = document.getElementById('jobemail').value.trim();
+  if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email))
+    return alert('อีเมลไม่ถูกต้องครับ (เว้นว่างได้ถ้าไม่ต้องการใบเสร็จทางอีเมล)');
   btn.disabled = true; btn.textContent = 'กำลังส่งประกาศ…';
   try{
     const r = await api('/jobs', {method:'POST', body:{
@@ -386,7 +393,7 @@ async function submitJob(){
       budget_max: parseFloat(document.getElementById('bmax').value) || null,
       preferred_time: document.getElementById('daysel').value + ' ' + document.getElementById('timesel').value,
       contact_phone: phone, landmark: document.getElementById('landmark').value.trim() || null,
-      lat: state.lat, lng: state.lng,
+      lat: state.lat, lng: state.lng, email: email || null,
     }});
     localStorage.setItem('aindai_job', r.job_id);
     state.photos = []; state.voiceUrl = null; state.lat = null; state.lng = null;

@@ -51,3 +51,12 @@ def valid_full_name(value: str) -> bool:
     """ต้องมีทั้งชื่อและนามสกุล (อย่างน้อย 2 คำ) — ใช้ออกใบ 50 ทวิ"""
     parts = [p for p in (value or "").strip().split() if len(p) >= 2]
     return len(parts) >= 2
+
+
+_EMAIL = re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
+
+
+def normalize_email(value: str | None) -> str | None:
+    """ตัดช่องว่าง + เป็นตัวพิมพ์เล็ก → คืน None ถ้ารูปแบบไม่ถูกต้อง/ว่าง"""
+    e = (value or "").strip().lower()
+    return e if _EMAIL.match(e) else None
