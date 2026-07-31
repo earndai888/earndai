@@ -1,5 +1,5 @@
 """REST API สำหรับ LIFF Mini App — flow เต็ม: สร้างงาน → เสนอราคา → เลือก →
-จ่าย escrow → OTP เริ่มงาน → เสร็จ → ยืนยัน → สร้าง settlement → รีวิว"""
+จ่ายเข้าบัญชีกลาง → OTP เริ่มงาน → เสร็จ → ยืนยัน → สร้าง settlement → รีวิว"""
 import logging
 import secrets
 import uuid
@@ -660,7 +660,7 @@ async def payment_qr(payment_id: str):
     return Response(png, media_type="image/png")
 
 
-# ── เลือกช่าง + จ่ายเงิน escrow ─────────────────────────
+# ── เลือกช่าง + จ่ายเงินเข้าบัญชีกลาง ────────────────────
 
 async def pending_order(pool, customer_id) -> dict | None:
     """งานล่าสุดที่ยังยกเลิกได้ (ยังไม่จ่ายเงิน) — ใช้โชว์ปุ่มยกเลิกในแชท"""
@@ -673,7 +673,7 @@ async def pending_order(pool, customer_id) -> dict | None:
 
 async def do_cancel_pending(pool, customer_id) -> str | None:
     """ยกเลิกงานที่ค้างอยู่ (ก่อนจ่ายเงิน) → คืนชื่องานที่ยกเลิก หรือ None ถ้าไม่มี
-    ยกเลิกได้เฉพาะงานที่ยังไม่จ่าย — ถ้าจ่ายเข้า escrow แล้วต้องผ่านแอดมิน (มีเงินเกี่ยวข้อง)"""
+    ยกเลิกได้เฉพาะงานที่ยังไม่จ่าย — ถ้าจ่ายเข้าบัญชีกลางแล้วต้องผ่านแอดมิน (มีเงินเกี่ยวข้อง)"""
     job = await pending_order(pool, customer_id)
     if not job:
         return None
@@ -747,7 +747,7 @@ async def _send_receipt(pool, payment_row, job) -> None:
 
 
 async def do_confirm_payment(pool, payment_id: str, customer_id=None) -> dict | None:
-    """ยืนยันการชำระ → escrow, สุ่ม OTP, สถานะ assigned, แจ้งช่าง
+    """ยืนยันการชำระ → พักเงินบัญชีกลาง, สุ่ม OTP, สถานะ assigned, แจ้งช่าง
     customer_id: ใส่เพื่อกันคนอื่นยืนยันแทน (ฝั่งแชท) — None = ไม่เช็ค (REST เดิม)"""
     payment = await pool.fetchrow(
         "SELECT * FROM payments WHERE id = $1::uuid", payment_id)
@@ -776,7 +776,7 @@ async def do_confirm_payment(pool, payment_id: str, customer_id=None) -> dict | 
         try:
             await line_api.push(prov["line_user_id"], [{
                 "type": "text",
-                "text": f"🎉 คุณได้งาน \"{job['title']}\" แล้ว!\nลูกค้าจ่ายเงินเข้าระบบเรียบร้อย เงินพักปลอดภัยใน escrow\n\nเมื่อถึงหน้างาน ขอรหัส 4 หลักจากลูกค้าแล้วกรอกในระบบเพื่อเริ่มงานครับ"}])
+                "text": f"🎉 คุณได้งาน \"{job['title']}\" แล้ว!\nลูกค้าจ่ายเงินเข้าระบบเรียบร้อย เงินพักปลอดภัยในบัญชีกลาง\n\nเมื่อถึงหน้างาน ขอรหัส 4 หลักจากลูกค้าแล้วกรอกในระบบเพื่อเริ่มงานครับ"}])
         except Exception:
             pass
     await _send_receipt(pool, payment, job)   # ใบเสร็จเข้า LINE (+ อีเมลถ้ามี)

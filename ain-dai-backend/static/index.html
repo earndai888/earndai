@@ -119,7 +119,7 @@
     <div class="qr"><img id="qrimg" alt="QR PromptPay"></div>
     <div class="to">สแกนจ่ายด้วยแอปธนาคารใดก็ได้ (PromptPay)</div>
   </div>
-  <div class="escrow">🛡️ <span><b>เงินยังไม่ถึงช่างทันที</b> — เงินเข้าบัญชีกลางเอิ้นได้ (escrow) งานเสร็จและคุณกดยืนยันแล้ว เงินถึงจะโอนให้ช่าง</span></div>
+  <div class="notice">🛡️ <span><b>เงินยังไม่ถึงช่างทันที</b> — เงินเข้าบัญชีกลางเอิ้นได้ งานเสร็จและคุณกดยืนยันแล้ว เงินถึงจะโอนให้ช่าง</span></div>
   <button class="btn navy" id="paybtn" onclick="confirmPay()">ฉันโอนแล้ว</button>
 </section>
 
@@ -130,7 +130,7 @@
     <h2>รหัสเริ่มงานของคุณ</h2>
     <p>เมื่อช่างมาถึงบ้าน <b>บอกรหัสนี้กับช่าง</b><br>ช่างกรอกรหัสในระบบ = ยืนยันว่าเริ่มงานจริง</p>
   </div>
-  <div class="escrow warn">📍 <span>ห้ามบอกรหัสก่อนช่างมาถึง — รหัสนี้คือหลักฐานว่าช่างมาทำงานที่บ้านคุณจริง</span></div>
+  <div class="notice warn">📍 <span>ห้ามบอกรหัสก่อนช่างมาถึง — รหัสนี้คือหลักฐานว่าช่างมาทำงานที่บ้านคุณจริง</span></div>
   <button class="btn ghost" onclick="openActiveJob()">ดูสถานะงาน</button>
 </section>
 
@@ -161,7 +161,7 @@
     <input class="inp" id="reviewtext" style="width:100%;margin:6px 0 0" placeholder="เขียนรีวิวสั้นๆ เช่น งานเรียบร้อย ตรงเวลา">
     <button class="btn sm" id="reviewbtn" onclick="submitReview()">ส่งรีวิว</button>
   </div>
-  <div class="escrow" id="fundline">🌱 <span>—</span></div>
+  <div class="notice" id="fundline">🌱 <span>—</span></div>
   <button class="btn" onclick="clearActive()">กลับหน้าแรก</button>
 </section>
 
@@ -266,7 +266,7 @@ function prefillFromChat(){
 
   if(filled.length){
     const note = document.createElement('div');
-    note.className = 'escrow';
+    note.className = 'notice';
     note.style.margin = '0 18px 4px';
     note.innerHTML = '✅ <span>น้องเอิ้นได้กรอก <b>' + filled.join(' • ') +
                      '</b> จากที่คุยกันให้แล้วครับ ตรวจดูอีกทีแล้วกดส่งได้เลย</span>';
@@ -499,11 +499,11 @@ function showTrack(j){
   document.getElementById('trkava').textContent = '👷';
   document.getElementById('trkname').textContent = selp.display_name || '—';
   document.getElementById('trkmeta').textContent =
-    `${j.category_name} • ${selp.price?fmt(selp.price)+'฿':''} (${j.payment&&j.payment.status==='paid'?'พักใน escrow':'รอชำระ'})`;
+    `${j.category_name} • ${selp.price?fmt(selp.price)+'฿':''} (${j.payment&&j.payment.status==='paid'?'พักในบัญชีกลาง':'รอชำระ'})`;
   const order = ['assigned','in_progress','done','confirmed'];
   let cur = order.indexOf(j.status); if(j.status==='settled') cur = 4;
   const steps = [
-    {t1:'จ่ายเงินเข้าระบบแล้ว', t2:'เงินพักปลอดภัยใน escrow'},
+    {t1:'จ่ายเงินเข้าระบบแล้ว', t2:'เงินพักปลอดภัยในบัญชีกลาง'},
     {t1:'ช่างยืนยันรหัสเริ่มงาน', t2:'ช่างถึงหน้างานและกรอก OTP แล้ว'},
     {t1:'ช่างทำงานเสร็จ ส่งรูปผลงาน', t2:'รอคุณตรวจงาน'},
     {t1:'ยืนยันงาน ปล่อยเงินให้ช่าง', t2:'ถ้าไม่กดภายใน 24 ชม. ระบบยืนยันให้อัตโนมัติ'},
@@ -514,7 +514,7 @@ function showTrack(j){
   const extra = document.getElementById('trkextra');
   let x = '';
   if(j.status==='assigned' && j.otp)
-    x += `<div class="escrow warn">🔑 <span>รหัสเริ่มงานของคุณ: <b style="font-size:16px;letter-spacing:2px">${esc(j.otp)}</b> — บอกช่างเมื่อมาถึงเท่านั้น</span></div>`;
+    x += `<div class="notice warn">🔑 <span>รหัสเริ่มงานของคุณ: <b style="font-size:16px;letter-spacing:2px">${esc(j.otp)}</b> — บอกช่างเมื่อมาถึงเท่านั้น</span></div>`;
   if(j.photos && j.photos.length)
     x += `<div class="card"><div style="font-family:'Mitr';font-size:14px">รูปประกอบงาน</div>
           <div class="thumbs" style="margin:8px 0 0">${j.photos.map(p=>`<img src="${p}">`).join('')}</div></div>`;

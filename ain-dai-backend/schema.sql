@@ -100,7 +100,7 @@ ALTER TABLE jobs
   ADD CONSTRAINT fk_jobs_assigned_bid
   FOREIGN KEY (assigned_bid_id) REFERENCES bids(id);
 
--- ── เงิน: escrow, settlement, กองทุน ───────────────────
+-- ── เงิน: บัญชีกลาง, settlement, กองทุน ────────────────
 
 CREATE TABLE fee_config (
   id             serial PRIMARY KEY,

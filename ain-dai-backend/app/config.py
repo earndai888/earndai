@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql://aindai:aindai@localhost:5432/aindai"
     # PromptPay ของแพลตฟอร์ม (เบอร์มือถือ 10 หลัก หรือเลขผู้เสียภาษี 13 หลัก)
-    # เงิน escrow จะเข้าบัญชีนี้ — ตั้งเป็นของจริงใน .env ก่อนใช้งาน
+    # เงินค่าจ้างจะพักในบัญชีกลางนี้ — ตั้งเป็นของจริงใน .env ก่อนใช้งาน
     promptpay_id: str = "0899999999"
     # อำเภอนำร่อง — meta จะแสดงเฉพาะตำบลในอำเภอนี้ (เว้นว่าง = ทุกตำบล)
     pilot_amphoe: str = "กันทรลักษ์"

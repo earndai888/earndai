@@ -98,7 +98,7 @@ def payment_card(payment_id: str, amount, provider_name: str, qr_path: str) -> d
     """การ์ดจ่ายเงินในแชท — รูป QR PromptPay + ปุ่ม 'ฉันโอนแล้ว'"""
     qr = public_url(qr_path)
     body = [
-        {"type": "text", "text": "🛡️ จ่ายผ่านกระเป๋ากลาง (escrow)", "size": "sm",
+        {"type": "text", "text": "🛡️ จ่ายผ่านกระเป๋าเงินกลาง", "size": "sm",
          "color": GREEN, "weight": "bold"},
         {"type": "text", "text": f"จ้าง {provider_name}", "weight": "bold", "size": "md",
          "color": NAVY, "wrap": True},

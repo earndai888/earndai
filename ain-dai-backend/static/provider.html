@@ -19,7 +19,7 @@
   <div class="top"><div class="brand">เอิ้น<b>ได้</b> <small>ฝั่งช่าง</small></div></div>
   <div class="bubble" style="background:var(--navy)">
     <h1 id="preghead">สมัครเป็นช่างกับเอิ้นได้</h1>
-    <p>รับงานใกล้บ้าน เลือกงานเองได้ เงินเข้าแน่นอนผ่านระบบ escrow</p>
+    <p>รับงานใกล้บ้าน เลือกงานเองได้ เงินเข้าแน่นอนผ่านระบบบัญชีกลาง</p>
   </div>
   <div class="sect"><h2>1. ข้อมูลตัวจริง <span class="lock">🔒 ลูกค้าไม่เห็น</span></h2></div>
   <label class="f">ชื่อ-นามสกุลจริง (ตามบัตรประชาชน) *</label>
@@ -60,7 +60,7 @@
   <div class="chips" id="rtambons"></div>
 
   <div class="sect"><h2>4. บัญชีรับเงินค่าจ้าง <span class="lock">🔒 ลูกค้าไม่เห็น</span></h2></div>
-  <div class="escrow" style="margin:6px 18px 2px">🛡 <span>ลูกค้า<b>ไม่โอนเงินให้ช่างโดยตรง</b> —
+  <div class="notice" style="margin:6px 18px 2px">🛡 <span>ลูกค้า<b>ไม่โอนเงินให้ช่างโดยตรง</b> —
     ลูกค้าจ่ายเข้าบัญชีกลางของเอิ้นได้ก่อน พองานเสร็จและลูกค้ากดยืนยัน
     ระบบจึงโอนส่วนของช่างเข้าพร้อมเพย์นี้ ช่างไม่โดนเบี้ยว ลูกค้าไม่โดนทิ้งงาน</span></div>
   <label class="f">เบอร์พร้อมเพย์ที่จะรับเงิน</label>
@@ -371,16 +371,16 @@ function applicationBanner(){
   if(!me.has_applied) return '';
   const note = me.admin_note ? `<br><b>หมายเหตุจากแอดมิน:</b> ${esc(me.admin_note)}` : '';
   if(me.approval_status === 'pending')
-    return `<div class="escrow warn" style="margin:12px 18px">⏳ <span><b>ใบสมัครอยู่ระหว่างตรวจสอบ</b><br>
+    return `<div class="notice warn" style="margin:12px 18px">⏳ <span><b>ใบสมัครอยู่ระหว่างตรวจสอบ</b><br>
             แอดมินกำลังตรวจเอกสาร จะแจ้งผลทาง LINE ครับ${note}</span></div>`;
   if(me.approval_status === 'info_requested')
-    return `<div class="escrow warn" style="margin:12px 18px">📄 <span><b>แอดมินขอเอกสารเพิ่มเติม</b>${note}<br>
+    return `<div class="notice warn" style="margin:12px 18px">📄 <span><b>แอดมินขอเอกสารเพิ่มเติม</b>${note}<br>
             อัปโหลดเพิ่มแล้วกดส่งใบสมัครอีกครั้งครับ</span></div>`;
   if(me.approval_status === 'rejected')
-    return `<div class="escrow" style="margin:12px 18px;background:#FDECEC;color:#D64545">⛔ <span>
+    return `<div class="notice" style="margin:12px 18px;background:#FDECEC;color:#D64545">⛔ <span>
             <b>ใบสมัครไม่ผ่านการอนุมัติ</b>${note}<br>แก้ไขแล้วส่งใหม่ได้ครับ</span></div>`;
   if(me.provider && !me.provider.active)
-    return `<div class="escrow" style="margin:12px 18px;background:#FDECEC;color:#D64545">⛔ <span>
+    return `<div class="notice" style="margin:12px 18px;background:#FDECEC;color:#D64545">⛔ <span>
             <b>บัญชีช่างถูกระงับการรับงานชั่วคราว</b>${note}</span></div>`;
   return '';
 }
@@ -421,10 +421,10 @@ function prefillRegister(){
     if(p.contract_signed && !p.contract_outdated){
       document.getElementById('ragree').checked = true;
       document.getElementById('contractbox').insertAdjacentHTML('beforebegin',
-        '<div class="escrow" style="margin:10px 18px">✅ <span>เซ็นรับหนังสือสัญญาไว้แล้ว — เซ็นใหม่เฉพาะเมื่อต้องการเปลี่ยนลายเซ็น</span></div>');
+        '<div class="notice" style="margin:10px 18px">✅ <span>เซ็นรับหนังสือสัญญาไว้แล้ว — เซ็นใหม่เฉพาะเมื่อต้องการเปลี่ยนลายเซ็น</span></div>');
     }else if(p.contract_outdated){
       document.getElementById('contractbox').insertAdjacentHTML('beforebegin',
-        '<div class="escrow warn" style="margin:10px 18px">📄 <span><b>หนังสือสัญญามีการปรับปรุง</b><br>กรุณาอ่านและเซ็นใหม่ก่อนรับงานต่อครับ</span></div>');
+        '<div class="notice warn" style="margin:10px 18px">📄 <span><b>หนังสือสัญญามีการปรับปรุง</b><br>กรุณาอ่านและเซ็นใหม่ก่อนรับงานต่อครับ</span></div>');
     }
   }
   document.getElementById('rname').value = me.display_name === 'ผู้ใช้ใหม่' ? '' : me.display_name;
@@ -622,7 +622,7 @@ async function openJob(id){
     }
     if(j.status==='bidding' || j.status==='open'){
       html += `
-        <div class="escrow">💰 <span>งานนี้เปิดรับข้อเสนอ — ใส่ราคาที่คุณรับได้ แล้วส่งให้ลูกค้าเลือก</span></div>
+        <div class="notice">💰 <span>งานนี้เปิดรับข้อเสนอ — ใส่ราคาที่คุณรับได้ แล้วส่งให้ลูกค้าเลือก</span></div>
         <label class="f">ราคาที่เสนอ (บาท)</label>
         <input class="inp" id="jbp" inputmode="numeric" placeholder="เช่น 350">
         <label class="f">ข้อความถึงลูกค้า</label>
@@ -632,23 +632,23 @@ async function openJob(id){
         <button class="btn" onclick="bidFromJob(this)">💵 ส่งข้อเสนอ</button>`;
     }else if(j.status==='assigned'){
       html += `
-        <div class="escrow">🛡️ <span>ลูกค้าจ่ายเงินเข้า escrow แล้ว — ไปหน้างานแล้วขอรหัส 4 หลักจากลูกค้าเพื่อเริ่มงาน</span></div>
+        <div class="notice">🛡️ <span>ลูกค้าจ่ายเงินเข้าบัญชีกลางแล้ว — ไปหน้างานแล้วขอรหัส 4 หลักจากลูกค้าเพื่อเริ่มงาน</span></div>
         <label class="f">กรอกรหัสเริ่มงานจากลูกค้า</label>
         <input class="inp" id="potp" maxlength="4" inputmode="numeric" placeholder="รหัส 4 หลัก" style="text-align:center;font-size:22px;letter-spacing:8px;font-family:'Mitr'">
         <button class="btn" onclick="startJob(this)">ยืนยันเริ่มงาน</button>`;
     }else if(j.status==='in_progress'){
       html += `
-        <div class="escrow">🔨 <span>กำลังทำงาน — เสร็จแล้วถ่ายรูปผลงานแนบ แล้วกดส่งงาน</span></div>
+        <div class="notice">🔨 <span>กำลังทำงาน — เสร็จแล้วถ่ายรูปผลงานแนบ แล้วกดส่งงาน</span></div>
         <div class="photo" onclick="document.getElementById('pphotoinput').click()">📷 แนบรูปผลงาน (แตะเพื่อเลือกรูป)</div>
         <input type="file" id="pphotoinput" accept="image/*" multiple style="display:none" onchange="addWorkPhotos(this.files)">
         <div class="thumbs" id="pworkthumbs"></div>
         <button class="btn" onclick="completeJob(this)">✅ ส่งงาน แจ้งลูกค้าตรวจ</button>`;
     }else if(j.status==='done'){
-      html += `<div class="escrow warn">⏳ <span>ส่งงานแล้ว — รอลูกค้าตรวจและกดยืนยัน (ไม่กดภายใน 24 ชม. ระบบยืนยันอัตโนมัติ)</span></div>`;
+      html += `<div class="notice warn">⏳ <span>ส่งงานแล้ว — รอลูกค้าตรวจและกดยืนยัน (ไม่กดภายใน 24 ชม. ระบบยืนยันอัตโนมัติ)</span></div>`;
     }else if(j.status==='confirmed'||j.status==='settled'){
       const s = j.settlement||{};
       html += `
-        <div class="escrow">🎉 <span>ลูกค้ายืนยันแล้ว! เงินส่วนของคุณ <b>${s.provider_net?(+s.provider_net).toFixed(2):''}฿</b> ระบบจะโอนเข้า PromptPay ที่ลงทะเบียนไว้</span></div>
+        <div class="notice">🎉 <span>ลูกค้ายืนยันแล้ว! เงินส่วนของคุณ <b>${s.provider_net?(+s.provider_net).toFixed(2):''}฿</b> ระบบจะโอนเข้า PromptPay ที่ลงทะเบียนไว้</span></div>
         ${j.review?`<div class="card center"><div style="font-family:'Mitr'">รีวิวจากลูกค้า</div>
           <div class="stars">${Array.from({length:j.review.rating},()=>'<span class="on">★</span>').join('')}</div>
           ${j.review.comment?`<div class="note">"${esc(j.review.comment)}"</div>`:''}</div>`:''}`;

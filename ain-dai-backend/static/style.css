@@ -93,8 +93,8 @@ audio{width:100%;margin-top:8px}
 .paybox{text-align:center;padding-top:6px}
 .paybox .amt{font-family:'Mitr';font-size:32px;font-weight:600;color:var(--navy)}
 .paybox .to{font-size:13px;color:var(--muted)}
-.escrow{margin:12px 18px;background:var(--green-pale);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--green-dark);display:flex;gap:10px;align-items:flex-start}
-.escrow.warn{background:var(--orange-pale);color:#8A5A10}
+.notice{margin:12px 18px;background:var(--green-pale);border-radius:12px;padding:12px 14px;font-size:13px;color:var(--green-dark);display:flex;gap:10px;align-items:flex-start}
+.notice.warn{background:var(--orange-pale);color:#8A5A10}
 
 .otpwrap{text-align:center;padding:26px 18px 8px}
 .otppin{width:120px;height:120px;margin:0 auto;background:var(--orange);border-radius:50% 50% 50% 6px;transform:rotate(-45deg);display:flex;align-items:center;justify-content:center}

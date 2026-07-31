@@ -70,7 +70,7 @@ def test_ใบเสร็จส่งทั้ง_line_และอีเม�
 
 
 def test_ใบเสร็จพังไม่ทำให้จ่ายเงินล้ม():
-    """ส่งใบเสร็จเป็น best-effort — พังต้องไม่ทำให้ escrow ล้ม"""
+    """ส่งใบเสร็จเป็น best-effort — พังต้องไม่ทำให้การพักเงินล้ม"""
     src = inspect.getsource(_send_receipt)
     assert "except Exception" in src
 

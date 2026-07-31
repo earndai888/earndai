@@ -1,4 +1,4 @@
-"""ระบบหลังบ้านแอดมิน — อนุมัติช่าง, ทะเบียนช่าง, กระดานงาน, การเงิน/escrow,
+"""ระบบหลังบ้านแอดมิน — อนุมัติช่าง, ทะเบียนช่าง, กระดานงาน, การเงิน,
 ข้อพิพาท, สถิติ KPI + export CSV
 
 ป้องกันด้วย header X-Admin-Token เทียบกับ ADMIN_TOKEN ใน env
@@ -61,7 +61,7 @@ async def summary(_: bool = Admin):
           (SELECT COALESCE(sum(tax_withheld),0) FROM settlements)                      AS tax_withheld,
           (SELECT COALESCE(sum(amount),0) FROM community_fund_ledger)                  AS fund_total,
           (SELECT COALESCE(sum(p.amount),0) FROM payments p JOIN jobs j ON j.id=p.job_id
-            WHERE p.status='paid' AND j.status IN ('assigned','in_progress','done','disputed')) AS escrow_held,
+            WHERE p.status='paid' AND j.status IN ('assigned','in_progress','done','disputed')) AS held_amount,
           (SELECT COALESCE(sum(provider_net),0) FROM settlements WHERE status='pending') AS payout_pending,
           (SELECT count(*) FROM disputes WHERE status='open')                          AS disputes_open,
           (SELECT COALESCE(round(avg(rating_avg)::numeric,2),0) FROM providers
@@ -510,12 +510,12 @@ async def list_jobs(tab: str = Query("new"), _: bool = Admin):
             for r in rows]
 
 
-# ══════════ 4. การเงิน / escrow / payout ══════════
+# ══════════ 4. การเงิน / บัญชีกลาง / payout ══════════
 
 @router.get("/finance")
 async def finance(_: bool = Admin):
     pool = db.get_pool()
-    escrow = await pool.fetch("""
+    held = await pool.fetch("""
         SELECT j.id, j.title, p.amount, p.status, j.status AS job_status,
                t.name AS tambon, p.paid_at
           FROM payments p JOIN jobs j ON j.id = p.job_id
@@ -537,9 +537,9 @@ async def finance(_: bool = Admin):
           FROM community_fund_ledger f JOIN tambons t ON t.id = f.tambon_id
          ORDER BY f.created_at DESC LIMIT 100""")
     return {
-        "escrow": [dict(r) | {"id": str(r["id"]),
+        "held": [dict(r) | {"id": str(r["id"]),
                               "paid_at": r["paid_at"].isoformat() if r["paid_at"] else None}
-                   for r in escrow],
+                   for r in held],
         "payouts": [dict(r) | {"id": str(r["id"]), "created_at": r["created_at"].isoformat()}
                     for r in payouts],
         "fund": [dict(r) | {"created_at": r["created_at"].isoformat()} for r in fund],
@@ -714,7 +714,7 @@ async def get_settings(_: bool = Admin):
             {"key": "LIFF_ID", "label": "เปิดหน้าเว็บในแอป LINE (ล็อกอินจริง)", "ok": liff_ok},
             {"key": "GEMINI_API_KEY", "label": "AI น้องเอิ้นได้ คุยกับลูกค้า",
              "ok": bool(settings.gemini_api_key)},
-            {"key": "PROMPTPAY_ID", "label": "QR รับเงิน escrow",
+            {"key": "PROMPTPAY_ID", "label": "QR รับเงินเข้าบัญชีกลาง",
              "ok": settings.promptpay_id != "0899999999"},
             {"key": "COMPANY_TAX_ID", "label": "เลขผู้เสียภาษี (ใบ 50 ทวิ)",
              "ok": bool(settings.company_tax_id)},

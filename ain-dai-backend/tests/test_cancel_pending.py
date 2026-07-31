@@ -61,7 +61,7 @@ def test_ยกเลิกได้เฉพาะงานที่ยัง�
 
 
 def test_งานที่จ่ายแล้วยกเลิกเองไม่ได้():
-    """assigned = จ่ายเข้า escrow แล้ว — ไม่อยู่ในเงื่อนไข pending_order"""
+    """assigned = จ่ายเข้าบัญชีกลางแล้ว — ไม่อยู่ในเงื่อนไข pending_order"""
     src = inspect.getsource(jobs.pending_order)
     assert "assigned" not in src.split("status IN")[1].split(")")[0]
 

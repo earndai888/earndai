@@ -232,7 +232,7 @@ async def handle_transaction_postback(reply_token: str, line_user_id: str | None
                              promptpay.payload(settings.promptpay_id, float(r["amount"]))})
             await line_api.reply(reply_token, msgs)
 
-        elif action == "paid":                    # ลูกค้ากดยืนยันโอน → escrow + OTP
+        elif action == "paid":                    # ลูกค้ากดยืนยันโอน → พักเงินบัญชีกลาง + OTP
             r = await do_confirm_payment(pool, data["pid"], me["id"])
             if not r:
                 await line_api.reply(reply_token, [{"type": "text",

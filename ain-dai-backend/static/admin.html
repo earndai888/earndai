@@ -217,7 +217,7 @@ label.f{display:block;font-family:'Mitr';font-size:13.5px;margin:14px 0 6px}
       <div class="phead"><h1>💰 การเงิน</h1></div>
       <div class="kpis" id="finKpis"></div>
       <div class="card"><h2>💵 เงินที่พักไว้</h2>
-        <div id="escrowList"></div></div>
+        <div id="heldList"></div></div>
       <div class="card"><h2>🏦 รอโอนให้ช่าง</h2>
         <div id="payoutList"></div></div>
       <div class="card"><h2>🌱 กองทุนชุมชน</h2>
@@ -368,7 +368,7 @@ async function loadOverview(){
     ${kpi('รายได้รวม', money(s.gmv)+' ฿','hl')}
     ${kpi('รายได้ช่าง', money(s.provider_income)+' ฿')}
     ${kpi('กองทุนชุมชน', money(s.fund_total)+' ฿')}
-    ${kpi('เงินที่พักไว้', money(s.escrow_held)+' ฿', s.escrow_held>0?'warn':'')}
+    ${kpi('เงินที่พักไว้', money(s.held_amount)+' ฿', s.held_amount>0?'warn':'')}
     ${kpi('รอโอนให้ช่าง', money(s.payout_pending)+' ฿', s.payout_pending>0?'warn':'')}
     ${kpi('ช่างรออนุมัติ', num(s.providers_pending), s.providers_pending>0?'warn':'')}
     ${kpi('ช่างที่รับงานได้', num(s.providers_active))}
@@ -411,7 +411,7 @@ async function loadSystem(){
     ['ชื่อผู้หักภาษี (ใบ 50 ทวิ)', esc(s.company_name||'-')],
     ['เลขผู้เสียภาษี', s.company_tax_id?esc(s.company_tax_id):'<span class="chip danger">ยังไม่ตั้ง</span>'],
     ['ที่อยู่บริษัท', s.company_address?esc(s.company_address):'<span class="chip danger">ยังไม่ตั้ง</span>'],
-    ['พร้อมเพย์รับเงิน escrow', esc(s.promptpay_id)],
+    ['พร้อมเพย์รับเงินเข้าบัญชีกลาง', esc(s.promptpay_id)],
     ['โหมดทดสอบ (DEV_MODE)', s.dev_mode?'<span class="chip danger">เปิดอยู่ — ควรปิดก่อนใช้จริง</span>':'<span class="chip">ปิดแล้ว</span>'],
   ]);
 }
@@ -725,16 +725,16 @@ async function hold(jobId){
 async function loadFinance(){
   const [s,f] = await Promise.all([api('/summary'), api('/finance')]);
   document.getElementById('finKpis').innerHTML = `
-    ${kpi('เงินที่พักไว้', money(s.escrow_held)+' ฿','hl')}
+    ${kpi('เงินที่พักไว้', money(s.held_amount)+' ฿','hl')}
     ${kpi('รอโอนให้ช่าง', money(s.payout_pending)+' ฿', s.payout_pending>0?'warn':'')}
     ${kpi('รายได้ระบบ', money(s.platform_fee)+' ฿')}
     ${kpi('กองทุนชุมชน', money(s.fund_total)+' ฿')}
     ${kpi('ภาษีหัก ณ ที่จ่าย', money(s.tax_withheld)+' ฿')}`;
-  document.getElementById('escrowList').innerHTML = f.escrow.length ? table(
+  document.getElementById('heldList').innerHTML = f.held.length ? table(
     ['งาน','ตำบล','จำนวนเงิน','สถานะงาน','จ่ายเมื่อ'],
-    f.escrow.map(e=>[esc(e.title),'ต.'+esc(e.tambon),money(e.amount)+' ฿',
+    f.held.map(e=>[esc(e.title),'ต.'+esc(e.tambon),money(e.amount)+' ฿',
       STATUS_TH[e.job_status]||e.job_status, dt(e.paid_at)]))
-    : '<div class="muted">ไม่มีเงินค้างใน escrow</div>';
+    : '<div class="muted">ไม่มีเงินค้างในบัญชีกลาง</div>';
   document.getElementById('payoutList').innerHTML = f.payouts.length ? table(
     ['วันที่','งาน','ช่าง','พร้อมเพย์','ราคางาน','ช่างได้รับ','ภาษี','สถานะ',''],
     f.payouts.map(p=>[dt(p.created_at),esc(p.title),esc(p.provider_name||'-'),

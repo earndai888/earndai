@@ -125,7 +125,7 @@ def test_สัญญาเวอร์ชันเก่าต้องเซ�
 
 def test_สัญญามีข้อสำคัญครบ():
     text = contract.CONTRACT_TEXT
-    for หัวข้อ in ("อาชีพอิสระ", "89%", "escrow", "รหัส 4 หลัก",
+    for หัวข้อ in ("อาชีพอิสระ", "89%", "บัญชีกลาง", "รหัส 4 หลัก",
                    "ข้อมูลส่วนบุคคล", "ระงับบัญชี"):
         assert หัวข้อ in text
     assert contract.payload()["version"] == contract.CONTRACT_VERSION
