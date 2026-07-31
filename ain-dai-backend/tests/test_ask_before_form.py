@@ -22,15 +22,11 @@ def test_หมวดไม่มีงานย่อยไม่ใส่_sub_
     assert card["quickReply"]["items"][0]["action"]["data"] == "category=ac-cleaning"
 
 
-def test_ยางรั่วถามก่อนไม่ส่งลิงก์ทันที():
-    """เคสที่ลูกค้าเจอ: พิมพ์รถยางรั่ว → ต้องถามต่อ ไม่ใช่ส่งฟอร์มเลย"""
+def test_ยางรั่วเริ่มเก็บข้อมูลในแชทไม่ส่งลิงก์():
+    """เคสที่ลูกค้าเจอ: พิมพ์รถยางรั่ว → เริ่มบทสนทนาในแชท ไม่ส่งลิงก์เว็บ"""
     src = inspect.getsource(webhook.handle_event)
-    # เจอ keyword มั่นใจ + รู้ประเภทแล้ว → เก็บ pending intent + ถามรายละเอียด
-    assert "set_pending_intent" in src
-    assert "flex.ask_details" in src
-    # คำตอบรอบถัดไป (ไม่ match keyword) → เปิดฟอร์มพร้อม description
-    assert "get_pending_intent" in src
-    assert "clear_pending_intent" in src
+    assert "chat_job.start" in src          # เริ่มเก็บข้อมูลในแชท
+    assert "open_form_message" not in src   # ไม่ส่งลิงก์ฟอร์มเว็บอีกแล้ว
 
 
 def test_งานด่วนยังถามประเภทย่อยก่อนถ้าไม่รู้():
@@ -41,19 +37,7 @@ def test_งานด่วนยังถามประเภทย่อย�
     assert subcategories_of("emergency") and not subcategories_of("ac-cleaning")
 
 
-def test_เปิดฟอร์มแล้วเคลียร์เรื่องที่คุยค้าง():
-    """กดข้ามไปกรอกฟอร์ม (postback category) → ล้าง pending intent ไม่ถามซ้ำ"""
+def test_เลือกหมวดจากปุ่มก็เริ่มเก็บข้อมูลในแชท():
+    """กดปุ่มเลือกหมวด (postback category) → เริ่มบทสนทนาในแชท ไม่ส่งลิงก์"""
     src = inspect.getsource(webhook.handle_event)
-    assert "clear_pending_intent(src[\"userId\"])" in src
-
-
-def test_pending_intent_หมดอายุได้():
-    """เรื่องที่คุยค้างนานเกินไปต้องไม่เอามาต่อ (กันงานเก่าโผล่)"""
-    from app import ai_chat
-    assert ai_chat.PENDING_TTL_MIN > 0
-    assert "make_interval(mins => $2)" in inspect.getsource(ai_chat.get_pending_intent)
-
-
-def test_ยกเลิกล้าง_pending_intent_ด้วย():
-    from app import ai_chat
-    assert "chat_pending" in inspect.getsource(ai_chat.clear_history)
+    assert "chat_job.start(uid" in src

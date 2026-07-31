@@ -4,7 +4,7 @@ from urllib.parse import parse_qsl
 
 from fastapi import APIRouter, Header, HTTPException, Request
 
-from .. import ai_chat, db, flex, line_api, promptpay
+from .. import ai_chat, chat_job, db, flex, line_api, promptpay
 from ..config import settings
 from ..intent import classify, classify_sub, subcategories_of
 from .jobs import (do_approve_job, do_cancel_pending, do_confirm_payment,
@@ -53,16 +53,18 @@ async def handle_event(event: dict) -> None:
 
     if etype == "postback":
         data = dict(parse_qsl(event.get("postback", {}).get("data", "")))
+        uid = src.get("userId")
         if slug := data.get("category"):
             sub = data.get("sub")
-            # เลือกหมวดที่มีงานย่อยแต่ยังไม่ได้บอกว่าเรื่องอะไร → ถามต่ออีกชั้น
-            ask_sub = flex.subcategory_quick_reply(slug) if not sub else None
-            if not ask_sub and src.get("userId"):   # เปิดฟอร์มแล้ว = จบเรื่องที่คุยค้าง
-                await ai_chat.clear_pending_intent(src["userId"])
-            await line_api.reply(reply_token, [
-                ask_sub or flex.open_form_message(slug, subcategory_slug=sub)])
+            # งานด่วนที่ยังไม่รู้ประเภท → ถามประเภทก่อน ไม่งั้นเริ่มเก็บข้อมูลในแชทเลย
+            if not sub and subcategories_of(slug):
+                await line_api.reply(reply_token, [flex.subcategory_quick_reply(slug)])
+            elif uid:
+                await upsert_user(uid)
+                await line_api.reply(reply_token,
+                                     await chat_job.start(uid, slug, sub or None, ""))
         elif data.get("a"):
-            await handle_transaction_postback(reply_token, src.get("userId"), data)
+            await handle_transaction_postback(reply_token, uid, data)
         return
 
     # บอทถูกเชิญเข้ากลุ่ม/ห้อง → แนะนำวิธีผูกหมวดงาน
@@ -72,30 +74,45 @@ async def handle_event(event: dict) -> None:
             "text": "สวัสดีครับ 🙌 นี่คือบอทเอิ้นได้\n\nตั้งให้กลุ่มนี้เป็นกลุ่มช่างของหมวดงาน — พิมพ์:\nผูกหมวด ช่างแอร์\n(หรือ งานสวน / แม่บ้าน / งานด่วน)\n\nงานใหม่ในหมวดนี้จะแจ้งเข้ากลุ่มอัตโนมัติ\nเลิกรับแจ้งเตือน พิมพ์: เลิกผูก"}])
         return
 
-    if etype == "message" and event["message"].get("type") == "text":
-        text = event["message"]["text"].strip()
+    if etype == "message":
+        mtype = event["message"].get("type")
 
-        # ในกลุ่ม/ห้อง: รับเฉพาะคำสั่งผูก/เลิกผูกตำบล
+        # ในกลุ่ม/ห้อง: รับเฉพาะข้อความ text สำหรับคำสั่งผูก/เลิกผูก
         if src.get("type") in ("group", "room"):
-            gid = src.get("groupId") or src.get("roomId")
-            await handle_group_command(reply_token, gid, text)
+            if mtype == "text":
+                gid = src.get("groupId") or src.get("roomId")
+                await handle_group_command(reply_token, gid, event["message"]["text"].strip())
             return
 
         user_id = src.get("userId")
+        if not user_id:
+            return
         await upsert_user(user_id)
-        text = event["message"]["text"]
+        text = event["message"].get("text", "").strip() if mtype == "text" else ""
 
-        # พิมพ์ "ยกเลิก"/"เริ่มใหม่" → ล้างบทสนทนาเดิม + ยกเลิกงานที่ค้าง
-        if is_cancel_command(text):
+        # พิมพ์ "ยกเลิก"/"เริ่มใหม่" → ล้างบทสนทนา + งานร่างในแชท + งานที่ค้าง
+        if mtype == "text" and is_cancel_command(text):
             await handle_cancel(reply_token, user_id)
             return
 
-        pool = db.get_pool()
-        me = await pool.fetchrow("SELECT id FROM users WHERE line_user_id = $1", user_id) if user_id else None
-        pending_job = await pending_order(pool, me["id"]) if me else None
+        user = await db.get_pool().fetchrow(
+            "SELECT id, line_user_id FROM users WHERE line_user_id = $1", user_id)
 
-        # AI ชั้นที่ 2: คุยโต้ตอบก่อน ค่อยส่งลิงก์เมื่อคุยรู้เรื่องแล้ว
-        if ai_chat.enabled() and user_id:
+        # มีงานร่างค้างในแชท → เดินหน้าเก็บข้อมูลต่อ (ตำบล/รูป/งบ/รายละเอียด)
+        draft = await chat_job.get_draft(user_id)
+        if draft:
+            await line_api.reply(reply_token, await chat_job.advance(dict(user), event, draft))
+            return
+
+        # ยังไม่มีงานร่าง แต่ส่งรูป/ตำแหน่งมาลอยๆ → บอกวิธีเริ่ม
+        if mtype != "text":
+            await line_api.reply(reply_token, [{"type": "text",
+                "text": "พิมพ์บอกงานที่ต้องการก่อนนะครับ เช่น \"แอร์ไม่เย็น\" หรือ \"รถยางรั่ว\" "
+                        "แล้วผมจะถามรายละเอียดทีละขั้นแล้วประกาศหาช่างให้เลยครับ 😊"}])
+            return
+
+        # AI ชั้นที่ 2 (ถ้าเปิด Gemini): คุยโต้ตอบ แล้วเริ่มเก็บข้อมูลในแชท
+        if ai_chat.enabled():
             await line_api.show_loading(user_id)
             ai = await ai_chat.chat(user_id, text)
             if ai:
@@ -103,44 +120,29 @@ async def handle_event(event: dict) -> None:
                 if ai["text"]:
                     messages.append({"type": "text", "text": ai["text"]})
                 if ai["form"]:
-                    # ส่งปุ่มพร้อมข้อมูลที่คุยไว้ → หน้าเว็บกรอกให้อัตโนมัติ
-                    # ยกเว้นงานด่วนที่ยังไม่รู้ว่าด่วนเรื่องอะไร → ถามก่อน
                     f = ai["form"]
-                    ask_sub = (flex.subcategory_quick_reply(f["category_slug"])
-                               if not f.get("subcategory_slug") else None)
-                    messages.append(ask_sub or flex.open_form_message(**f))
-                # คุยค้าง/มีงานค้าง → แนบปุ่มยกเลิกรายการเดิมให้กดได้
-                if pending_job:
-                    flex.with_quick_reply(messages, flex.restart_quick_reply(True))
+                    if subcategories_of(f["category_slug"]) and not f.get("subcategory_slug"):
+                        messages.append(flex.subcategory_quick_reply(f["category_slug"]))
+                    else:
+                        # เริ่มเก็บข้อมูลในแชท (แทนการส่งลิงก์เว็บ)
+                        messages += await chat_job.start(
+                            user_id, f["category_slug"], f.get("subcategory_slug"),
+                            f.get("description") or text)
                 await line_api.reply(reply_token, messages)
                 return
 
-        # ชั้นที่ 1 (fallback, Gemini ปิด): ถามต่อ 1 คำถามก่อนเปิดฟอร์ม
+        # ชั้นที่ 1 (Gemini ปิด): จับหมวด → เริ่มเก็บข้อมูลในแชท
         result = classify(text)
-        prev = await ai_chat.get_pending_intent(user_id) if user_id else None
-        # คำตอบรายละเอียดมักมีคำ keyword ซ้ำ (เช่น "อยู่น้ำอ้อม ยางแตก") — ถ้าเรื่องยัง
-        # เดิม (หรือเดาไม่ออก) ให้ถือเป็นคำตอบ อย่าถามซ้ำ; เปลี่ยนหมวดชัดเจนถึงเริ่มใหม่
-        answering = prev and (not result.confident or result.slug == prev["category_slug"])
-        if answering:
-            await ai_chat.clear_pending_intent(user_id)
-            sub = prev["subcategory_slug"]
-            messages = [flex.open_form_message(
-                prev["category_slug"], subcategory_slug=sub, description=text[:300])]
-        elif result.confident:
+        if result.confident:
             sub = classify_sub(text, result.slug)
             if subcategories_of(result.slug) and not sub:
                 # งานด่วนแต่ยังไม่รู้ว่าด่วนเรื่องอะไร → ถามประเภทก่อน
-                messages = [flex.subcategory_quick_reply(result.slug)]
+                await line_api.reply(reply_token, [flex.subcategory_quick_reply(result.slug)])
             else:
-                # รู้หมวดแล้ว → ถามรายละเอียด/ตำบลก่อน ค่อยเปิดฟอร์ม (ไม่ส่งลิงก์ทันที)
-                if user_id:
-                    await ai_chat.set_pending_intent(user_id, result.slug, sub)
-                messages = [flex.ask_details(result.slug, sub)]
+                await line_api.reply(reply_token,
+                                     await chat_job.start(user_id, result.slug, sub, text))
         else:
-            messages = [flex.category_quick_reply()]
-        if pending_job:
-            flex.with_quick_reply(messages, flex.restart_quick_reply(True))
-        await line_api.reply(reply_token, messages)
+            await line_api.reply(reply_token, [flex.category_quick_reply()])
 
 
 async def handle_group_command(reply_token: str, group_id: str | None, text: str) -> None:
@@ -250,6 +252,20 @@ async def handle_transaction_postback(reply_token: str, line_user_id: str | None
                 "text": "ขอบคุณครับพี่ 🙏 ยืนยันงานเรียบร้อย ระบบกำลังโอนเงินให้ช่าง\n"
                         "ฝากรีวิวช่างในแอปเพื่อช่วยช่างดีๆ ในชุมชนของเราด้วยนะครับ ⭐"}])
 
+        elif action == "jobpost":                 # กดปุ่มประกาศหาช่าง (จบในแชท)
+            draft = await chat_job.get_draft(line_user_id)
+            if not draft:
+                await line_api.reply(reply_token, [{"type": "text",
+                    "text": "ไม่พบข้อมูลงานที่ค้างไว้ครับ พิมพ์บอกงานใหม่ได้เลย"}])
+            else:
+                await line_api.reply(reply_token,
+                    await chat_job.post_job({"id": me["id"], "line_user_id": line_user_id}, draft))
+
+        elif action == "jobcancel":               # ยกเลิกงานร่างในแชท
+            await chat_job.clear(line_user_id)
+            await line_api.reply(reply_token, [{"type": "text",
+                "text": "ยกเลิกแล้วครับ พิมพ์บอกงานใหม่ได้เลยเมื่อพร้อม 😊"}])
+
         elif action == "cancel":                  # กดปุ่มยกเลิกรายการเดิม
             await handle_cancel(reply_token, line_user_id)
     except HTTPException as e:
@@ -264,6 +280,7 @@ async def handle_cancel(reply_token: str, line_user_id: str | None) -> None:
     me = await pool.fetchrow("SELECT id FROM users WHERE line_user_id = $1", line_user_id)
     cancelled = await do_cancel_pending(pool, me["id"]) if me else None
     await ai_chat.clear_history(line_user_id)
+    await chat_job.clear(line_user_id)   # ล้างงานร่างที่กำลังเก็บข้อมูลในแชทด้วย
     if cancelled:
         text = (f"ยกเลิกรายการเดิม \"{cancelled}\" ให้แล้วครับ ✅\n"
                 "เริ่มใหม่ได้เลย พี่อยากให้ช่วยเรื่องอะไรครับ?")

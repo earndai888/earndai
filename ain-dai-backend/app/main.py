@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import ai_chat, audit, catalog, db, vault
+from . import ai_chat, audit, catalog, chat_job, db, vault
 from .config import settings
 from .routers import admin, jobs, webhook
 from .routers.jobs import create_settlement
@@ -47,6 +47,7 @@ async def auto_release_loop() -> None:
 async def lifespan(app: FastAPI):
     await db.connect()
     await ai_chat.ensure_table()  # ตารางประวัติแชท AI (สร้างอัตโนมัติถ้ายังไม่มี)
+    await chat_job.ensure_table()  # ตารางงานร่างในแชท (สร้างงานให้จบในแชท)
     try:
         await catalog.ensure_subcategories()  # กลุ่มงานย่อยของงานด่วน 24 ชม.
         await catalog.ensure_provider_kyc()   # คอลัมน์ยืนยันตัวตนช่าง

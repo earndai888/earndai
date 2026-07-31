@@ -41,15 +41,16 @@ def test_ลิงก์แผนที่ไม่ใช้_api_key():
 
 def test_ต้องมีรูปหน้างานอย่างน้อย2():
     assert jobs.MIN_JOB_PHOTOS == 2
-    src = inspect.getsource(jobs.create_job)
-    assert "MIN_JOB_PHOTOS" in src
+    endpoint = inspect.getsource(jobs.create_job)
+    assert "MIN_JOB_PHOTOS" in endpoint
+    core = inspect.getsource(jobs.do_create_job)
+    assert "min_photos" in core
     # กรองเฉพาะไฟล์ที่อัปโหลดในระบบ (กันยิง url ภายนอกมานับเป็นรูป)
-    assert 'startswith("/uploads/")' in src
+    assert 'startswith("/uploads/")' in core
 
 
 def test_เบอร์หน้างานถูก_normalize_ก่อนเก็บ():
-    src = inspect.getsource(jobs.create_job)
-    assert "thai_id.normalize_phone(body.contact_phone)" in src
+    assert "thai_id.normalize_phone" in inspect.getsource(jobs.do_create_job)
 
 
 def test_เบอร์ลูกค้าเห็นเฉพาะแอดมินไม่ใช่ช่าง():

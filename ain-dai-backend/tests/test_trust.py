@@ -66,7 +66,7 @@ def test_pdpa_มีเนื้อหาสำคัญครบ():
 
 
 def test_แจ้งงานครั้งแรกต้องยอมรับ_pdpa():
-    src = inspect.getsource(jobs.create_job)
+    src = inspect.getsource(jobs.do_create_job)
     assert "pdpa_consent" in src
     assert "ยอมรับนโยบายความเป็นส่วนตัว" in src
     # ยอมรับแล้วเวอร์ชันเดิม → ไม่ต้องถามซ้ำ

@@ -68,6 +68,21 @@ async def push(to: str, messages: list[dict]) -> None:
         r.raise_for_status()
 
 
+async def get_message_content(message_id: str) -> bytes | None:
+    """ดาวน์โหลดไฟล์ (รูป/เสียง) ที่ผู้ใช้ส่งมาในแชท — ต้องมี token"""
+    if not token_ready():
+        return None
+    try:
+        async with httpx.AsyncClient(timeout=20) as client:
+            r = await client.get(
+                f"https://api-data.line.me/v2/bot/message/{message_id}/content",
+                headers=_headers())
+            return r.content if r.status_code == 200 else None
+    except Exception:
+        log.warning("โหลดไฟล์จากแชทไม่สำเร็จ: %s", message_id)
+        return None
+
+
 async def verify_liff_token(id_token: str) -> dict | None:
     """ตรวจ LIFF ID token → คืน profile (sub = line_user_id) หรือ None ถ้าไม่ผ่าน"""
     async with httpx.AsyncClient(timeout=10) as client:

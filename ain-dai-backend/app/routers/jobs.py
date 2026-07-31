@@ -369,42 +369,43 @@ async def pdpa_policy():
     return pdpa.payload()
 
 
-@router.post("/jobs", status_code=201)
-async def create_job(body: JobIn, user: dict = Depends(current_user)):
-    pool = db.get_pool()
+async def do_create_job(pool, user, data: dict, *, min_photos: int = 2) -> dict:
+    """สร้างงาน (ใช้ร่วมทั้งฟอร์มเว็บและแชท LINE)
+    data: category_slug, subcategory_slug, tambon_id, title, description, photos,
+          budget_min/max, contact_phone, landmark, lat, lng, preferred_time,
+          voice_note_url, address_full, email, pdpa_consent
+    min_photos: เว็บบังคับ 2, แชทผ่อนได้ (ช่างเห็นรายละเอียดจากบทสนทนา)"""
     # ความยินยอม PDPA — บังคับครั้งแรก (เวอร์ชันใหม่ต้องยอมรับใหม่)
     consented = await pool.fetchval(
         "SELECT pdpa_version = $2 FROM users WHERE id = $1", user["id"], pdpa.PDPA_VERSION)
     if not consented:
-        if not body.pdpa_consent:
+        if not data.get("pdpa_consent"):
             raise HTTPException(400, "กรุณายอมรับนโยบายความเป็นส่วนตัว (PDPA) ก่อนแจ้งงานครับ")
         await pool.execute(
             "UPDATE users SET pdpa_consent_at = now(), pdpa_version = $2 WHERE id = $1",
             user["id"], pdpa.PDPA_VERSION)
-    cat = await pool.fetchrow("SELECT * FROM service_categories WHERE slug = $1", body.category_slug)
+    cat = await pool.fetchrow("SELECT * FROM service_categories WHERE slug = $1", data["category_slug"])
     if not cat:
         raise HTTPException(400, "ไม่รู้จักหมวดงานนี้")
     sub = None
-    if body.subcategory_slug:
+    if data.get("subcategory_slug"):
         sub = await pool.fetchrow(
             "SELECT * FROM service_subcategories WHERE slug = $1 AND category_id = $2",
-            body.subcategory_slug, cat["id"])
+            data["subcategory_slug"], cat["id"])
         if not sub:
             raise HTTPException(400, "ไม่รู้จักประเภทงานย่อยนี้")
-    elif subcategories_of(body.category_slug):
+    elif subcategories_of(data["category_slug"]):
         raise HTTPException(400, "หมวดนี้ต้องเลือกประเภทงานด้วยครับ")
-    # เบอร์ติดต่อหน้างาน — ตรวจให้เป็นเบอร์ไทยจริง (ช่างที่รับงานโทรหาลูกค้าได้)
-    contact_phone = thai_id.normalize_phone(body.contact_phone)
-    if not contact_phone:
+    # เบอร์ติดต่อหน้างาน — เว็บบังคับ, แชทเว้นได้ (ติดต่อผ่านระบบ)
+    contact_phone = thai_id.normalize_phone(data.get("contact_phone") or "")
+    if data.get("contact_phone") and not contact_phone:
         raise HTTPException(400, "เบอร์ติดต่อหน้างานไม่ถูกต้องครับ")
-    # รูปหน้างานต้องมาจากการอัปโหลดของระบบ และครบขั้นต่ำ
-    photos = [p for p in body.photos if p.startswith("/uploads/")]
-    if len(photos) < MIN_JOB_PHOTOS:
-        raise HTTPException(400, f"แนบรูปหน้างานอย่างน้อย {MIN_JOB_PHOTOS} รูปครับ "
+    photos = [p for p in (data.get("photos") or []) if p.startswith("/uploads/")]
+    if len(photos) < min_photos:
+        raise HTTPException(400, f"แนบรูปหน้างานอย่างน้อย {min_photos} รูปครับ "
                                  "ช่างจะได้ประเมินงานและเตรียมของถูก")
-    # อีเมล (ไม่บังคับ) — เก็บไว้ที่ผู้ใช้ ใช้ส่งใบเสร็จทางอีเมล
-    if body.email:
-        if em := thai_id.normalize_email(body.email):
+    if data.get("email"):
+        if em := thai_id.normalize_email(data["email"]):
             await pool.execute("UPDATE users SET email = $2 WHERE id = $1", user["id"], em)
         else:
             raise HTTPException(400, "อีเมลไม่ถูกต้องครับ")
@@ -415,13 +416,19 @@ async def create_job(body: JobIn, user: dict = Depends(current_user)):
            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,'bidding',
                    now() + interval '72 hours')
            RETURNING *""",
-        user["id"], cat["id"], sub["id"] if sub else None, body.tambon_id, body.title,
-        body.description, photos, body.voice_note_url, body.budget_min, body.budget_max,
-        body.preferred_date, body.preferred_time, body.address_full,
-        contact_phone, body.landmark, body.lat, body.lng,
+        user["id"], cat["id"], sub["id"] if sub else None, data["tambon_id"], data["title"],
+        data.get("description"), photos, data.get("voice_note_url"),
+        data.get("budget_min"), data.get("budget_max"), data.get("preferred_date"),
+        data.get("preferred_time"), data.get("address_full"),
+        contact_phone or None, data.get("landmark"), data.get("lat"), data.get("lng"),
     )
     await broadcast_job(dict(job), cat["name_th"], sub["name_th"] if sub else None)
     return {"job_id": str(job["id"]), "status": job["status"]}
+
+
+@router.post("/jobs", status_code=201)
+async def create_job(body: JobIn, user: dict = Depends(current_user)):
+    return await do_create_job(db.get_pool(), user, body.model_dump(), min_photos=MIN_JOB_PHOTOS)
 
 
 async def broadcast_job(job: dict, category_name: str, sub_name: str | None = None) -> None:
