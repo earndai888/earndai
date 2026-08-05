@@ -708,7 +708,8 @@ async function loadJobs(){
         `${j.icon||''} <b>${esc(j.title)}</b><br><span class="muted">ต.${esc(j.tambon)} · ${STATUS_TH[j.status]}</span>`,
         `${esc(j.customer_name)}${contactCell(j)}<br><span class="muted">↔ ${esc(j.provider_name||'-')} ${j.provider_phone?esc(j.provider_phone):''}</span>`,
         money(j.price)+' ฿',
-        j.payment_status==='paid'?'<span class="chip">🔒 เก็บไว้แล้ว</span>':'<span class="chip warn">รอชำระ</span>',
+        (j.payment_status==='paid'?'<span class="chip">🔒 เก็บไว้แล้ว</span>':'<span class="chip warn">รอชำระ</span>')
+          + (j.slip_url?`<br><a href="${esc(j.slip_url)}" target="_blank" class="chip">🧾 ดูสลิป</a>`:''),
         j.otp_verified_at?'<span class="chip">✓ เช็คอินแล้ว</span>':`<span class="chip gray">รหัส ${esc(j.start_otp||'-')}</span>`,
         `<button class="btn sm danger" onclick="hold('${j.id}')">อายัดเงิน</button>`]));
   }else if(JOBTAB==='done'){

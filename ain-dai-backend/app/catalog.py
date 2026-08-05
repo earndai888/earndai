@@ -88,6 +88,8 @@ async def ensure_job_fields() -> None:
     await pool.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS receipt_token text")
     await pool.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS receipt_no int")
     await pool.execute("CREATE SEQUENCE IF NOT EXISTS receipt_no_seq START 1")
+    # สลิปการโอนที่ลูกค้าส่งมา — หลักฐานการจ่ายให้แอดมินตรวจ
+    await pool.execute("ALTER TABLE payments ADD COLUMN IF NOT EXISTS slip_url text")
 
 
 async def ensure_trust_fields() -> None:

@@ -62,3 +62,35 @@ def test_ปุ่มประกาศ_และยกเลิก_ในแช
 
 def test_เก็บงานร่างไม่เกิน60นาที():
     assert "60 minutes" in inspect.getsource(chat_job.get_draft)
+
+
+# ── ส่งสลิปการโอน (ไม่ใช่กดยืนยันเฉยๆ) ──────────────────
+
+def test_รับสลิปแล้วค่อยยืนยันจ่าย():
+    from app.routers import webhook
+    src = inspect.getsource(webhook.handle_slip)
+    assert "pending_payment" in src              # ต้องมีรายการรอชำระ
+    assert "get_message_content" in src          # ดาวน์โหลดรูปสลิป
+    assert "slip_url=slip_url" in src            # เก็บสลิปตอนยืนยัน
+    assert "do_confirm_payment" in src
+
+
+def test_รูปที่ส่งมาตอนมีรายการรอชำระถือเป็นสลิป():
+    from app.routers import webhook
+    src = inspect.getsource(webhook.handle_event)
+    assert "handle_slip" in src
+    assert 'mtype == "image"' in src
+
+
+def test_do_confirm_payment_เก็บ_slip_url():
+    from app.routers import jobs
+    src = inspect.getsource(jobs.do_confirm_payment)
+    assert "slip_url" in src
+    assert "slip_url=COALESCE($2, slip_url)" in src
+
+
+def test_การ์ดจ่ายเงินไม่มีปุ่มกดโอนแล้ว_ต้องส่งสลิป():
+    from app import flex
+    card = flex.payment_card("P", 500, "ช่างเอก", "/api/payments/P/qr.png")
+    assert "footer" not in card["contents"]      # ไม่มีปุ่มกดยืนยันลอยๆ
+    assert "สลิป" in str(card["contents"]["body"])

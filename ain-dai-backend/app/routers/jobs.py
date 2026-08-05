@@ -782,9 +782,19 @@ async def _send_receipt(pool, payment_row, job) -> None:
         log.warning("ส่งใบเสร็จไม่สำเร็จ (payment %s)", payment_row["id"])
 
 
-async def do_confirm_payment(pool, payment_id: str, customer_id=None) -> dict | None:
+async def pending_payment(pool, customer_id):
+    """รายการชำระที่ยังไม่จ่ายของลูกค้า — ใช้รับสลิปที่ส่งเข้ามาในแชท"""
+    return await pool.fetchrow(
+        """SELECT p.id, p.amount FROM payments p JOIN jobs j ON j.id = p.job_id
+            WHERE j.customer_id = $1 AND p.status = 'pending'
+            ORDER BY p.created_at DESC LIMIT 1""", customer_id)
+
+
+async def do_confirm_payment(pool, payment_id: str, customer_id=None,
+                             slip_url: str | None = None) -> dict | None:
     """ยืนยันการชำระ → พักเงินบัญชีกลาง, สุ่ม OTP, สถานะ assigned, แจ้งช่าง
-    customer_id: ใส่เพื่อกันคนอื่นยืนยันแทน (ฝั่งแชท) — None = ไม่เช็ค (REST เดิม)"""
+    customer_id: ใส่เพื่อกันคนอื่นยืนยันแทน (ฝั่งแชท) — None = ไม่เช็ค (REST เดิม)
+    slip_url: รูปสลิปการโอนที่ลูกค้าส่งมา (หลักฐานให้แอดมินตรวจ)"""
     payment = await pool.fetchrow(
         "SELECT * FROM payments WHERE id = $1::uuid", payment_id)
     if not payment or payment["status"] != "pending":
@@ -795,7 +805,8 @@ async def do_confirm_payment(pool, payment_id: str, customer_id=None) -> dict | 
             raise HTTPException(403, "ไม่ใช่งานของคุณ")
     payment = dict(payment)
     await pool.execute(
-        "UPDATE payments SET status='paid', paid_at=now() WHERE id=$1", payment["id"])
+        "UPDATE payments SET status='paid', paid_at=now(), slip_url=COALESCE($2, slip_url) WHERE id=$1",
+        payment["id"], slip_url)
     otp = f"{secrets.randbelow(10000):04d}"
     job = await pool.fetchrow(
         "UPDATE jobs SET status='assigned', start_otp=$2 WHERE id=$1 RETURNING *",

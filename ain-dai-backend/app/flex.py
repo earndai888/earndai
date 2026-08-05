@@ -95,7 +95,7 @@ def bid_card(bid: dict, provider: dict, job_title: str) -> dict:
 
 
 def payment_card(payment_id: str, amount, provider_name: str, qr_path: str) -> dict:
-    """การ์ดจ่ายเงินในแชท — รูป QR PromptPay + ปุ่ม 'ฉันโอนแล้ว'"""
+    """การ์ดจ่ายเงินในแชท — รูป QR PromptPay + บอกให้ส่งสลิปกลับมาในแชท"""
     qr = public_url(qr_path)
     body = [
         {"type": "text", "text": "🛡️ จ่ายผ่านกระเป๋าเงินกลาง", "size": "sm",
@@ -105,24 +105,18 @@ def payment_card(payment_id: str, amount, provider_name: str, qr_path: str) -> d
         {"type": "text", "text": f"{int(amount):,} บาท", "size": "xxl", "weight": "bold",
          "color": ORANGE, "align": "center", "margin": "md"},
         {"type": "text",
-         "text": "เงินพักในบัญชีกลาง งานเสร็จและพี่กดยืนยันแล้วเงินถึงจะโอนให้ช่าง "
-                 "โอนแล้วกดปุ่มด้านล่างได้เลยครับ",
+         "text": "1) สแกน QR จ่ายเงินด้วยแอปธนาคาร\n"
+                 "2) ถ่ายรูปสลิปการโอน แล้วส่งกลับมาในแชทนี้ได้เลยครับ 📤\n\n"
+                 "เงินพักในบัญชีกลาง งานเสร็จและพี่กดยืนยันแล้วเงินถึงจะโอนให้ช่างครับ",
          "size": "xs", "color": "#68776C", "wrap": True, "margin": "md"},
     ]
-    bubble = {
-        "type": "bubble",
-        "body": {"type": "box", "layout": "vertical", "contents": body},
-        "footer": {"type": "box", "layout": "vertical", "contents": [
-            {"type": "button", "style": "primary", "color": NAVY, "height": "sm",
-             "action": {"type": "postback", "label": "✅ ฉันโอนแล้ว",
-                        "data": f"a=paid&pid={payment_id}", "displayText": "ฉันโอนเงินแล้ว"}},
-        ]},
-    }
+    bubble = {"type": "bubble",
+              "body": {"type": "box", "layout": "vertical", "contents": body}}
     if qr:   # LINE โหลดรูปได้ต่อเมื่อ public_base_url เป็น https จริง
         bubble["hero"] = {"type": "image", "url": qr, "size": "full",
                           "aspectRatio": "1:1", "aspectMode": "fit",
                           "backgroundColor": "#FFFFFF"}
-    return {"type": "flex", "altText": f"ชำระเงินจ้าง {provider_name} {int(amount):,} บาท",
+    return {"type": "flex", "altText": f"ชำระเงินจ้าง {provider_name} {int(amount):,} บาท — ส่งสลิปกลับมาในแชท",
             "contents": bubble}
 
 

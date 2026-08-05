@@ -518,7 +518,7 @@ async def list_jobs(tab: str = Query("new"), _: bool = Admin):
                b.price,
                EXTRACT(EPOCH FROM (now() - j.created_at))/60 AS age_min,
                (SELECT count(*) FROM bids x WHERE x.job_id = j.id AND x.status='active') AS bids_count,
-               pay.status AS payment_status, pay.amount AS payment_amount,
+               pay.status AS payment_status, pay.amount AS payment_amount, pay.slip_url,
                s.provider_net, s.platform_fee, s.fund_amount, s.tax_withheld, s.status AS settle_status,
                r.rating, r.comment,
                (SELECT d.id::text FROM disputes d WHERE d.job_id=j.id AND d.status='open' LIMIT 1) AS dispute_id
@@ -529,7 +529,7 @@ async def list_jobs(tab: str = Query("new"), _: bool = Admin):
           LEFT JOIN bids b ON b.id = j.assigned_bid_id
           LEFT JOIN providers p ON p.id = b.provider_id
           LEFT JOIN users pu ON pu.id = p.user_id
-          LEFT JOIN LATERAL (SELECT status, amount FROM payments
+          LEFT JOIN LATERAL (SELECT status, amount, slip_url FROM payments
                               WHERE job_id=j.id ORDER BY created_at DESC LIMIT 1) pay ON TRUE
           LEFT JOIN settlements s ON s.job_id = j.id
           LEFT JOIN reviews r ON r.job_id = j.id

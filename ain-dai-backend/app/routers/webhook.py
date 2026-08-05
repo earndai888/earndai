@@ -8,7 +8,7 @@ from .. import ai_chat, chat_job, db, flex, line_api, promptpay
 from ..config import settings
 from ..intent import classify, classify_sub, subcategories_of
 from .jobs import (do_approve_job, do_cancel_pending, do_confirm_payment,
-                   do_select_bid, pending_order)
+                   do_select_bid, pending_order, pending_payment)
 
 # คำสั่งยกเลิก/เริ่มใหม่ที่ลูกค้าพิมพ์ได้ (นอกจากกดปุ่ม)
 CANCEL_WORDS = {"ยกเลิก", "ยกเลิกรายการ", "ยกเลิกรายการเดิม", "เริ่มใหม่",
@@ -104,7 +104,12 @@ async def handle_event(event: dict) -> None:
             await line_api.reply(reply_token, await chat_job.advance(dict(user), event, draft))
             return
 
-        # ยังไม่มีงานร่าง แต่ส่งรูป/ตำแหน่งมาลอยๆ → บอกวิธีเริ่ม
+        # ส่งรูปมาโดยไม่มีงานร่าง — ถ้ามีรายการรอชำระ ถือเป็น "สลิปการโอน"
+        if mtype == "image":
+            await handle_slip(reply_token, dict(user), event["message"].get("id"))
+            return
+
+        # ส่งตำแหน่ง/อื่นๆ ลอยๆ → บอกวิธีเริ่ม
         if mtype != "text":
             await line_api.reply(reply_token, [{"type": "text",
                 "text": "พิมพ์บอกงานที่ต้องการก่อนนะครับ เช่น \"แอร์ไม่เย็น\" หรือ \"รถยางรั่ว\" "
@@ -228,23 +233,15 @@ async def handle_transaction_postback(reply_token: str, line_user_id: str | None
                                      f"/api/payments/{r['payment_id']}/qr.png")
             msgs = [{"type": "text",
                      "text": f"เลือกช่าง {prov['display_name'] if prov else ''} เรียบร้อยครับ 👍 "
-                             "สแกน QR ด้านล่างเพื่อจ่ายเข้ากระเป๋ากลางได้เลย"}, card]
+                             "สแกน QR ด้านล่างจ่ายเงิน แล้วส่งรูปสลิปกลับมาในแชทนี้ได้เลยครับ 📤"}, card]
             if not settings.public_base_url:   # โหมดยังไม่ตั้งโดเมน — ส่ง payload ให้ก่อน
                 msgs.append({"type": "text", "text": "PromptPay: " +
                              promptpay.payload(settings.promptpay_id, float(r["amount"]))})
             await line_api.reply(reply_token, msgs)
 
-        elif action == "paid":                    # ลูกค้ากดยืนยันโอน → พักเงินบัญชีกลาง + OTP
-            r = await do_confirm_payment(pool, data["pid"], me["id"])
-            if not r:
-                await line_api.reply(reply_token, [{"type": "text",
-                    "text": "รายการนี้ชำระไปแล้ว หรือไม่พบรายการครับ"}])
-                return
+        elif action == "paid":                    # การ์ดเก่า/พิมพ์มา → ขอสลิปแทน
             await line_api.reply(reply_token, [{"type": "text",
-                "text": f"รับเงินเข้ากระเป๋ากลางแล้วครับ 🛡️\n\n"
-                        f"รหัสเริ่มงานของพี่คือ  {r['otp']}\n"
-                        "บอกรหัสนี้กับช่างตอนช่างมาถึงบ้าน เพื่อยืนยันว่าช่างมาทำงานจริง "
-                        "งานเสร็จผมจะส่งปุ่มให้พี่กดยืนยันครับ"}])
+                "text": "รบกวนถ่ายรูปสลิปการโอนส่งมาในแชทนี้ด้วยครับ เพื่อยืนยันการชำระ 📤"}])
 
         elif action == "confirm":                 # ลูกค้ายืนยันจบงาน → ปล่อยเงิน
             await do_approve_job(pool, data["job"], me["id"])
@@ -270,6 +267,35 @@ async def handle_transaction_postback(reply_token: str, line_user_id: str | None
             await handle_cancel(reply_token, line_user_id)
     except HTTPException as e:
         await line_api.reply(reply_token, [{"type": "text", "text": f"ทำรายการไม่สำเร็จ: {e.detail}"}])
+
+
+async def handle_slip(reply_token: str, user: dict, message_id: str | None) -> None:
+    """ลูกค้าส่งรูปสลิปการโอน → เก็บสลิป + ยืนยันจ่าย (พักเงิน + รหัสเริ่มงาน)"""
+    pool = db.get_pool()
+    pay = await pending_payment(pool, user["id"])
+    if not pay:
+        await line_api.reply(reply_token, [{"type": "text",
+            "text": "ยังไม่มีรายการที่รอชำระครับ ถ้าจะแจ้งงานใหม่พิมพ์บอกได้เลย เช่น \"แอร์ไม่เย็น\""}])
+        return
+    content = await line_api.get_message_content(message_id)
+    if not content:
+        await line_api.reply(reply_token, [{"type": "text",
+            "text": "รับรูปสลิปไม่สำเร็จครับ ลองถ่ายใหม่แล้วส่งมาอีกทีนะครับ"}])
+        return
+    slip_url = await chat_job._save_photo(content)   # เก็บสลิปใน uploads
+    try:
+        r = await do_confirm_payment(pool, str(pay["id"]), user["id"], slip_url=slip_url)
+    except HTTPException as e:
+        await line_api.reply(reply_token, [{"type": "text", "text": f"ยืนยันไม่สำเร็จ: {e.detail}"}])
+        return
+    if not r:
+        await line_api.reply(reply_token, [{"type": "text", "text": "รายการนี้ชำระไปแล้วครับ"}])
+        return
+    await line_api.reply(reply_token, [{"type": "text",
+        "text": "ได้รับสลิปแล้วครับ ขอบคุณครับ 🙏\n\n"
+                f"รหัสเริ่มงานของพี่คือ  {r['otp']}\n"
+                "บอกรหัสนี้กับช่างตอนช่างมาถึงบ้าน เพื่อยืนยันว่าช่างมาทำงานจริง "
+                "งานเสร็จผมจะส่งปุ่มให้พี่กดยืนยันครับ"}])
 
 
 async def handle_cancel(reply_token: str, line_user_id: str | None) -> None:

@@ -32,10 +32,11 @@ def test_ช่างใหม่ไม่มีรีวิวไม่โช�
 
 # ── การ์ดจ่ายเงิน ───────────────────────────────────────
 
-def test_การ์ดจ่ายเงินมีปุ่มโอนแล้วผูกกับ_payment():
+def test_การ์ดจ่ายเงินบอกให้ส่งสลิปไม่มีปุ่มกดยืนยันลอยๆ():
     card = flex.payment_card("PAY1", Decimal("600"), "ช่างเอก", "/api/payments/PAY1/qr.png")
-    btn = card["contents"]["footer"]["contents"][0]["action"]
-    assert btn["data"] == "a=paid&pid=PAY1"
+    # ไม่มีปุ่มกด "ฉันโอนแล้ว" แล้ว — ต้องส่งสลิปจริง
+    assert "footer" not in card["contents"]
+    assert "สลิป" in str(card["contents"]["body"])
 
 
 def test_รูป_QR_โผล่เฉพาะเมื่อตั้งโดเมน(monkeypatch):
@@ -63,9 +64,11 @@ def test_endpoint_กับแชทใช้_service_ตัวเดียว�
     assert "do_select_bid" in inspect.getsource(jobs.select_bid)
     assert "do_confirm_payment" in inspect.getsource(jobs.confirm_payment)
     assert "do_approve_job" in inspect.getsource(jobs.approve_job)
-    wh = inspect.getsource(webhook.handle_transaction_postback)
+    wh = inspect.getsource(webhook)   # ทั้งไฟล์ webhook
     for fn in ("do_select_bid", "do_confirm_payment", "do_approve_job"):
         assert fn in wh
+    # ยืนยันจ่ายเงินย้ายไปตอนรับสลิป (handle_slip) แล้ว
+    assert "do_confirm_payment" in inspect.getsource(webhook.handle_slip)
 
 
 # ── ความปลอดภัย ─────────────────────────────────────────
